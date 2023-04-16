@@ -237,10 +237,18 @@
  	public static int maxTilesY = (int)bottomWorld / 16 + 1;
  	public const int sectionWidth = 200;
  	public const int sectionHeight = 150;
-@@ -687,7 +_,7 @@
- 	public const int maxItems = 400;
- 	public const int maxProjectiles = 1000;
- 	public const int maxNPCs = 200;
+@@ -683,11 +_,11 @@
+ 	public const int maxItemText = 20;
+ 	public const int maxPlayers = 255;
+ 	public static int maxNetPlayers = 255;
+-	public const int maxChests = 8000;
++	public static readonly int maxChests = 8000;
+-	public const int maxItems = 400;
++	public static readonly int maxItems = 400;
+-	public const int maxProjectiles = 1000;
++	public static readonly int maxProjectiles = 1000;
+-	public const int maxNPCs = 200;
++	public static readonly int maxNPCs = 200;
 -	private static UICharacterSelect _characterSelectMenu = new UICharacterSelect();
 +	internal static UICharacterSelect _characterSelectMenu = new UICharacterSelect();
  	private static UIWorldSelect _worldSelectMenu = new UIWorldSelect();
@@ -336,7 +344,7 @@
  	public static bool allChestStackHover;
  	public static bool inventorySortMouseOver;
  	public static float GraveyardVisualIntensity;
-@@ -829,7 +_,18 @@
+@@ -829,29 +_,64 @@
  	public static float ambientVolume = 1f;
  	public static float soundVolume = 1f;
  	public static ServerMode MenuServerMode = ServerMode.Lobby | ServerMode.FriendsCanJoin;
@@ -353,8 +361,54 @@
 +	/// <br/> Defaults to <see langword="false"/>.
 +	/// </summary>
  	public static bool[] tileMergeDirt = new bool[TileID.Count];
++	/// <summary>
++	/// If true, Tiles of the indexed Tile Type will be destroyed by weapons and projectiles.
++	/// </summary>
  	public static bool[] tileCut = new bool[TileID.Count];
  	public static bool[] tileAlch = new bool[TileID.Count];
++	/// <summary>
++	/// How rarly tiny ambient dust appear from this tile. Larger values mean less frequently
++	/// </summary>
+ 	public static int[] tileShine = new int[TileID.Count];
++	/// <summary>
++	/// If true, the tile will be drawn to be slightly more bright. 
++	/// </summary>
+ 	public static bool[] tileShine2 = new bool[TileID.Count];
+ 	public static bool[] wallHouse = new bool[WallID.Count];
+ 	public static bool[] wallDungeon = new bool[WallID.Count];
+ 	public static bool[] wallLight = new bool[WallID.Count];
+ 	public static int[] wallBlend = new int[WallID.Count];
+ 	public static bool[] tileStone = new bool[TileID.Count];
++	/// <summary>
++	/// If true for the given tile type, tiles of the type are mined using an axe instead of pickaxe.
++	/// </summary>
+ 	public static bool[] tileAxe = new bool[TileID.Count];
+ 	public static bool[] tileHammer = new bool[TileID.Count];
++	/// <summary>
++	/// If true for the given tile type, tiles of the type will be destoryed if in contact with water. <see cref="TileObjectData.WaterDeath"/> supersedes this if a <see cref="TileObjectData"/> is available.
++	/// </summary>
+ 	public static bool[] tileWaterDeath = new bool[TileID.Count];
++	/// <summary>
++	/// If true for the given tile type, tiles of the type will be destoryed if in contact with lava. <see cref="TileObjectData.LavaDeath"/> supersedes this if a <see cref="TileObjectData"/> is available.
++	/// </summary>
+ 	public static bool[] tileLavaDeath = new bool[TileID.Count];
+ 	public static bool[] tileTable = new bool[TileID.Count];
+ 	public static bool[] tileBlockLight = new bool[TileID.Count];
+ 	public static bool[] tileNoSunLight = new bool[TileID.Count];
+ 	public static bool[] tileDungeon = new bool[TileID.Count];
++	/// <summary>
++	/// If true for the given tile type, tiles will be drawn much brigter and give off additional dust if the player is under the effects of the Spelunker buff, magic lantern, or similar effect. 
++	/// </summary>
+ 	public static bool[] tileSpelunker = new bool[TileID.Count];
+ 	public static bool[] tileSolidTop = new bool[TileID.Count];
+ 	public static bool[] tileSolid = new bool[TileID.Count];
+ 	public static bool[] tileBouncy = new bool[TileID.Count];
++	/// <summary>
++	/// The priority of this tile in relation to the Metal Detector. The tile with the highest priority in range will show the corresponding map entry. The <see href="https://terraria.wiki.gg/wiki/Metal_Detector">Metal Detector wiki page</see> lists existing values to use as reference.
++	/// </summary>
+ 	public static short[] tileOreFinderPriority = new short[TileID.Count];
+ 	public static byte[] tileLargeFrames = new byte[TileID.Count];
+ 	public static byte[] wallLargeFrames = new byte[WallID.Count];
 @@ -862,6 +_,8 @@
  	public static bool[] tileNoFail = new bool[TileID.Count];
  	public static bool[] tileCracked = new bool[TileID.Count];
@@ -422,6 +476,18 @@
  	public static Preferences Configuration = new Preferences(SavePath + Path.DirectorySeparatorChar + "config.json");
  	public static Preferences InputProfiles = new Preferences(SavePath + Path.DirectorySeparatorChar + "input profiles.json");
  	public static KeyboardState inputText;
+@@ -1865,6 +_,11 @@
+ 	public static string getPort = Convert.ToString(Netplay.ListenPort);
+ 	public static bool menuMultiplayer;
+ 	public static bool menuServer;
++	/// <summary>
++	/// Denotes the current network mode: <b>0</b> for single player client, <b>1</b> for multiplayer client, and <b>2</b> for server.<br/>
++	/// Using <see cref="ID.NetmodeID"/> entries instead of 0, 1, and 2 will greatly enhance code readability.<br/>
++	/// Modders must properly use netMode to selectively run code. Following examples in ExampleMod and Terraria code as well as reading the <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-Netcode">Basic Netcode guide</see> are the best way to learn how to use netMode correctly.<br/>
++	/// </summary>
+ 	public static int netMode;
+ 	private static int _targetNetMode;
+ 	private static bool _hasPendingNetmodeChange;
 @@ -1970,7 +_,7 @@
  	public static bool _shouldUseWindyDayMusic = false;
  	public static bool _shouldUseStormMusic = false;
@@ -670,6 +736,16 @@
  		if (Configuration.Save())
  			return PlayerInput.Save();
  
+@@ -3282,6 +_,9 @@
+ 	protected void CheckBunny()
+ 	{
+ 		try {
++			if (!OperatingSystem.IsWindows())
++				return;
++
+ 			RegistryKey currentUser = Registry.CurrentUser;
+ 			currentUser = currentUser.CreateSubKey("Software\\Terraria");
+ 			if (currentUser != null && currentUser.GetValue("Bunny") != null && currentUser.GetValue("Bunny").ToString() == "1")
 @@ -3352,14 +_,40 @@
  		int currentValue3 = graphics.PreferredBackBufferHeight;
  		configuration.Get("DisplayWidth", ref currentValue2);
@@ -1272,6 +1348,14 @@
  		musicFade[50] = 1f;
  		if (dedServ)
  			netMode = 2;
+@@ -5095,6 +_,7 @@
+ 			if (!dedServ)
+ 				Lighting.Clear();
+ 		};
++		WorldGen.AddGenPasses();
+ 
+ 		DontStarveSeed.Initialize();
+ 		ResourceSetsManager = new PlayerResourceSetsManager();
 @@ -5108,11 +_,20 @@
  		BindSettingsTo(Configuration);
  		if (dedServ) {
@@ -2338,7 +2422,7 @@
  					if (diff == 1)
  						black = new Microsoft.Xna.Framework.Color((byte)((float)(int)mcColor.R * num4), (byte)((float)(int)mcColor.G * num4), (byte)((float)(int)mcColor.B * num4), a);
  
-@@ -16311,47 +_,90 @@
+@@ -16311,47 +_,91 @@
  
  					if (hoverItem.expert || rare == -12)
  						black = new Microsoft.Xna.Framework.Color((byte)((float)DiscoR * num4), (byte)((float)DiscoG * num4), (byte)((float)DiscoB * num4), a);
@@ -2425,7 +2509,8 @@
 +			if (item.damage > 0 && (!item.notAmmo || item.useStyle != 0) && (item.type < 71 || item.type > 74 || player[myPlayer].HasItem(905)) && item.DamageType.ShowStatTooltipLine(player[myPlayer], "Damage")) {
 +				LocalizedText tip;
 +				if (item.DamageType != null) {
-+					tip = new LocalizedText("", " " + item.DamageType.DisplayName);
++					bool addLeadingSpace = item.DamageType is not VanillaDamageClass;
++					tip = new LocalizedText("", (addLeadingSpace ? " " : "") + item.DamageType.DisplayName);
 +				}
 +				else {
 +					tip = Lang.tip[55]; // No damage class
@@ -3197,7 +3282,7 @@
  	public static void GetItemDrawFrame(int item, out Texture2D itemTexture, out Microsoft.Xna.Framework.Rectangle itemFrame)
  	{
  		instance.LoadItem(item);
-@@ -21985,10 +_,13 @@
+@@ -21985,6 +_,7 @@
  					if (n.ai[2] < -0.1f)
  						num11 = 28;
  
@@ -3205,12 +3290,14 @@
  					num10 = 0.75f;
  				}
  			}
- 
-+			NPCLoader.DrawTownAttackGun(n, ref num10, ref itemtype, ref num11);
-+
+@@ -21992,6 +_,7 @@
  			Vector2 vector4 = DrawPlayerItemPos(1f, itemtype);
  			GetItemDrawFrame(itemtype, out var itemTexture, out var value2);
  			int num12 = (int)vector4.X - num11;
++			NPCLoader.DrawTownAttackGun(n, ref itemTexture, ref value2, ref num10, ref num12);
+ 			Vector2 origin2 = new Vector2(-num12, value2.Height / 2);
+ 			if (n.spriteDirection == -1)
+ 				origin2 = new Vector2(value2.Width + num12, value2.Height / 2);
 @@ -22048,6 +_,7 @@
  			}
  			else if (n.type == 441) {
@@ -5190,7 +5277,7 @@
 +
 +			// Developer mode button.
 +			if (menuMode == 0 /*&& !ModCompile.DeveloperMode*/) {
-+				string developerModeText = Language.GetTextValue("tModLoader.13InfoButton");
++				string developerModeText = Language.GetTextValue("tModLoader.HowToAccessLegacytModLoaderButton");
 +
 +				// measure and draw text from bottom right
 +				var textSize = FontAssets.MouseText.Value.MeasureString(developerModeText);

@@ -331,7 +331,7 @@
  	public float manaCost = 1f;
  	public bool fireWalk;
  	public bool channel;
-@@ -961,16 +_,78 @@
+@@ -961,16 +_,89 @@
  	public int golferScoreAccumulated;
  	public int bartenderQuestLog;
  	public bool downedDD2EventAnyDifficulty;
@@ -342,7 +342,18 @@
 +	*/
 +	internal ref float armorPenetration => ref GetArmorPenetration(DamageClass.Generic);
 +
++	/// <summary>
++	/// The defense value of this player.<br/>
++	/// The <see href="https://terraria.wiki.gg/wiki/Defense#Players">Defense wiki page</see> teaches how player defense affects incoming damage alongside <see cref="DefenseEffectiveness"/>.<br/>
++	/// The value resets to 0 during <see cref="Player.ResetEffects"/> and is manipulated throughout <see cref="Player.Update(int)"/>.<br/>
++	/// If the final value is needed, <see cref="ModPlayer.PostUpdate"/> or anytime later is the best place. As such it is not recommended to manipulate the value during PostUpdate or at any time later for compatibility. Failure to follow this guideline will result in inconsistent behavior.<br/>
++	/// Due to this field being a <see cref="DefenseStat"/>, modders can freely add, subtract, multiply, and divide the value. The final result will properly account for all modifications applied.<br/>
++	/// </summary>
 +	public DefenseStat statDefense; // changed from int
++	/// <summary>
++	/// Determines how effective the player's <see cref="statDefense"/> is at reducing incoming damage.<br/>
++	/// The <see href="https://terraria.wiki.gg/wiki/Defense#Players">Defense wiki page</see> explains the effect, shown in the wiki as "factor".<br/>
++	/// </summary>
 +	public MultipliableFloat DefenseEffectiveness; // added by TML
 +
 +	/// <summary>
@@ -620,6 +631,19 @@
  	public Item honeyCombItem;
  	public int wireOperationsCooldown;
  	public int lastChest;
+@@ -1458,6 +_,12 @@
+ 	public int cMinion;
+ 	public int cLeinShampoo;
+ 	public int cFlameWaker;
++	/// <summary>
++	/// Provides efficient access to the number of projectiles of the specified type owned by this player currently active in the game world.<br/>
++	/// Can be used to prevent spawning additional projectiles when a limit is reached.<br/>
++	/// Updated each game update right before Player.UpdateBuffs.<br/>
++	/// For example, <c>return player.ownedProjectileCounts[Item.shoot] &lt; 1;</c> in <see cref="ModItem.CanUseItem"/> could prevent a player using the item if the projectile the item spawns is already in the game world for the player.
++	/// </summary>
+ 	public int[] ownedProjectileCounts = new int[ProjectileID.Count];
+ 	public bool[] npcTypeNoAggro = new bool[NPCID.Count];
+ 	public int lastPortalColorIndex;
 @@ -1507,7 +_,7 @@
  	private int[] unlitTorchY = new int[maxTorchAttacks];
  	private static int[] _torchAttackPosX = new int[400];
@@ -1113,7 +1137,7 @@
  							break;
  					}
 +					*/
-+					if (!ProjectileID.Sets.SingleGrappleHook[num8])
++					if (!ProjectileID.Sets.SingleGrappleHook[Main.projectile[num8].type])
 +						continue;
 +
 +					Main.projectile[num8].Kill();
@@ -1790,6 +1814,21 @@
  		}
  
  		UpdateHungerBuffs();
+@@ -8925,6 +_,14 @@
+ 		}
+ 	}
+ 
++	/// <summary>
++	/// A helper method that handles code common to pet buffs. Can be used during the buff update code.<br/>
++	/// Sets the buff time to the value and spawns the corresponding pet projectile for the player if not yet spawned.<br/>
++	/// </summary>
++	/// <param name="buffIndex"></param>
++	/// <param name="petBool"></param>
++	/// <param name="petProjID"></param>
++	/// <param name="buffTimeToGive"></param>
+ 	public void BuffHandle_SpawnPetIfNeededAndSetTime(int buffIndex, ref bool petBool, int petProjID, int buffTimeToGive = 18000)
+ 	{
+ 		buffTime[buffIndex] = buffTimeToGive;
 @@ -9226,23 +_,26 @@
  		accStopwatch = false;
  		accOreFinder = false;
@@ -2976,7 +3015,7 @@
  
  				nPC.immune[whoAmI] = NPCImmuneTime;
  				GiveImmuneTimeForCollisionAttack(PlayerImmuneTime);
-@@ -15863,21 +_,71 @@
+@@ -15863,21 +_,91 @@
  		return num;
  	}
  
@@ -3006,8 +3045,22 @@
 +		modifiers.IncomingDamageMultiplier *= Main.expertMode ? effect.ExpertDamageReceived : effect.NormalDamageReceived;
 +	}
 +
++	/// <summary>
++	/// Deals damage to an NPC (and syncs the hit in multiplayer). <br/>
++	/// The damage will be affected by modifiers, armor pen, enemy resistances etc. <br/>
++	/// Will not apply damage class modifiers/knockback. Use <see cref="GetTotalDamage{T}"/> to adjust the damage before calling if necessary. <br/>
++	/// Will apply daamage class based armor penetration. <br/>
++	/// Will exit early with no effect if <see cref="PlayerLoader.CanHitNPC"/> returns false.
++	/// </summary>
++	/// <param name="npc">The NPC to strike</param>
++	/// <param name="damage">The damage to deal to the NPC, before modifications, defense, resistances etc</param>
++	/// <param name="knockback">The amount of knockback to apply</param>
++	/// <param name="direction">The hit direction of the resulting strike (1 or -1)</param>
++	/// <param name="crit">Whether or not the strike is a crit</param>
++	/// <param name="damageType">Defaults to <see cref="DamageClass.Default"/></param>
++	/// <param name="damageVariation">Whether to apply damage variation. Defaults to false.</param>
 -	public void ApplyDamageToNPC(NPC npc, int damage, float knockback, int direction, bool crit)
-+	public void ApplyDamageToNPC(NPC npc, int damage, float knockback, int direction, bool crit, DamageClass? damageType = null, bool damageVariation = false)
++	public void ApplyDamageToNPC(NPC npc, int damage, float knockback, int direction, bool crit = false, DamageClass? damageType = null, bool damageVariation = false)
  	{
 +		if (!PlayerLoader.CanHitNPC(this, npc))
 +			return;
@@ -3028,6 +3081,12 @@
 +		StrikeNPCDirect(npc, modifiers.ToHitInfo(damage, crit, knockback, damageVariation, luck));
 +	}
 +
++	/// <summary>
++	/// Applies a hit to an NPC via <see cref="NPC.StrikeNPC(NPC.HitInfo, bool, bool)"/>. <br/>
++	/// Also calls player based OnHit and OnKill hooks, tracks dps and net syncs the strike
++	/// </summary>
++	/// <param name="npc">The NPC to strike</param>
++	/// <param name="hit">The hit to apply</param>
 +	public void StrikeNPCDirect(NPC npc, NPC.HitInfo hit)
 +	{
  		OnHit(npc.Center.X, npc.Center.Y, npc);
@@ -4313,7 +4372,7 @@
 +	}
 +
 +	// out param and extras from above added
-+	public double Hurt(PlayerDeathReason damageSource, int Damage, int hitDirection, out Player.HurtInfo info, bool pvp = false, bool quiet = false, int cooldownCounter = -1, bool dodgeable = true, float armorPenetration = 0, float scalingArmorPenetration = 0, float knockback = 4.5f)
++	public double Hurt(PlayerDeathReason damageSource, int Damage, int hitDirection, out HurtInfo info, bool pvp = false, bool quiet = false, int cooldownCounter = -1, bool dodgeable = true, float armorPenetration = 0, float scalingArmorPenetration = 0, float knockback = 4.5f)
 +	{
 +		info = default;
 +
@@ -4329,26 +4388,11 @@
  		bool flag = !immune;
  		bool flag2 = false;
  		int hitContext = cooldownCounter;
-@@ -29531,6 +_,9 @@
+@@ -29530,7 +_,34 @@
+ 		}
  
  		if (flag) {
- 			if (dodgeable) {
-+				if (whoAmI == Main.myPlayer && PlayerLoader.FreeDodge(this, damageSource, cooldownCounter))
-+					return 0.0;
-+
- 				if (whoAmI == Main.myPlayer && blackBelt && Main.rand.Next(10) == 0) {
- 					NinjaDodge();
- 					return 0.0;
-@@ -29545,24 +_,67 @@
- 					ShadowDodge();
- 					return 0.0;
- 				}
-+
-+				if (whoAmI == Main.myPlayer && PlayerLoader.ConsumableDodge(this, damageSource, cooldownCounter))
-+					return 0.0;
- 			}
- 
-+			Player.HurtModifiers modifiers = new() {
++			HurtModifiers modifiers = new() {
 +				DamageSource = damageSource,
 +				PvP = pvp,
 +				CooldownCounter = cooldownCounter,
@@ -4371,6 +4415,23 @@
 +
 +			ApplyVanillaHurtEffectModifiers(ref modifiers);
 +			info = modifiers.ToHurtInfo(Damage, statDefense, pvp ? 0.5f : DefenseEffectiveness.Value, knockback, noKnockback);
++
+ 			if (dodgeable) {
++				if (whoAmI == Main.myPlayer && PlayerLoader.FreeDodge(this, info))
++					return 0.0;
++
+ 				if (whoAmI == Main.myPlayer && blackBelt && Main.rand.Next(10) == 0) {
+ 					NinjaDodge();
+ 					return 0.0;
+@@ -29545,24 +_,44 @@
+ 					ShadowDodge();
+ 					return 0.0;
+ 				}
++
++				if (whoAmI == Main.myPlayer && PlayerLoader.ConsumableDodge(this, info))
++					return 0.0;
+ 			}
+ 
 +			Hurt(info, quiet);
 +			return info.Damage;
 +		}
@@ -5620,7 +5681,7 @@
 +			// num was pre-variation and post buffs. Equivalent to strike.SourceDamage.
 +			// num6 is post-variation and armor pen, only used by bees and muramasa.
 +			// By switching to strike.SourceDamage for num6, we introduce a slight vanilla discrepancy, but we remove the double damage randomization, and armor penetration
-+			ApplyNPCOnHitEffects(sItem, itemRectangle, strike.SourceDamage, strike.KnockBack, npcIndex, strike.SourceDamage, dmgDone);
++			ApplyNPCOnHitEffects(sItem, itemRectangle, strike.SourceDamage, strike.Knockback, npcIndex, strike.SourceDamage, dmgDone);
  			int num7 = Item.NPCtoBanner(nPC.BannerID());
  			if (num7 >= 0)
  				lastCreatureHit = num7;

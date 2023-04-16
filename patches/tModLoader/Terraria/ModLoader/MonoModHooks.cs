@@ -3,6 +3,7 @@ using MonoMod.RuntimeDetour;
 using MonoMod.RuntimeDetour.HookGen;
 using MonoMod.Utils;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -114,7 +115,36 @@ public static class MonoModHooks
 
 		HookEndpointManager.Clear();
 		assemblyDetours.Clear();
+		_hookCache.Clear();
 	}
+
+	#region Obsolete HookEndpointManager method replacement
+	// just exists to extend lifetime of Hook/ILHook so mods don't have to store the instances in static variables
+	private static ConcurrentDictionary<(MethodBase, Delegate), IDisposable> _hookCache = new();
+	private const string HookAlreadyAppliedMsg = "Delegate has already been applied to this method as a hook!";
+
+	/// <summary>
+	/// Adds a hook (implemented by <paramref name="hookDelegate"/>) to <paramref name="method"/>.
+	/// </summary>
+	/// <param name="method">The method to hook.</param>
+	/// <param name="hookDelegate">The hook delegate to use.</param>
+	public static void Add(MethodBase method, Delegate hookDelegate)
+	{
+		if (!_hookCache.TryAdd((method, hookDelegate), new Hook(method, hookDelegate)))
+			throw new ArgumentException(HookAlreadyAppliedMsg);
+	}
+
+	/// <summary>
+	/// Adds an IL hook (implemented by <paramref name="callback"/>) to <paramref name="method"/>.
+	/// </summary>
+	/// <param name="method">The method to hook.</param>
+	/// <param name="callback">The hook delegate to use.</param>
+	public static void Modify(MethodBase method, ILContext.Manipulator callback)
+	{
+		if (!_hookCache.TryAdd((method, callback), new ILHook(method, callback)))
+			throw new ArgumentException(HookAlreadyAppliedMsg);
+	}
+	#endregion
 
 	/// <summary>
 	/// Dumps the list of currently registered IL hooks to the console. Useful for checking if a hook has been correctly added.
@@ -162,13 +192,16 @@ public static class MonoModHooks
 	/// <param name="il"></param>
 	public static void DumpIL(Mod mod, ILContext il)
 	{
-		string txt = il.ToString();
-		string filePath = Path.Combine(Logging.LogDir, "ILDumps", mod.Name, il.Method.FullName);
+		string methodName = il.Method.FullName.Replace(':', '_');
+		if (methodName.Contains('?')) // MonoMod IL copies are created with mangled names like DMD<Terraria.Player::beeType>?38504011::Terraria.Player::beeType(Terraria.Player)
+			methodName = methodName[(methodName.LastIndexOf('?')+1)..];
+
+		string filePath = Path.Combine(Logging.LogDir, "ILDumps", mod.Name, methodName + ".txt");
 		string folderPath = Path.GetDirectoryName(filePath);
 
 		if (!Directory.Exists(folderPath))
 			Directory.CreateDirectory(folderPath);
-		File.WriteAllText(filePath, txt);
+		File.WriteAllText(filePath, il.ToString());
 
 		Logging.tML.Debug($"Dumped ILContext \"{il.Method.FullName}\" to \"{filePath}\"");
 	}
@@ -177,6 +210,6 @@ public static class MonoModHooks
 public class ILPatchFailureException : Exception
 {
 	public ILPatchFailureException(Mod mod, ILContext il, Exception innerException) : base($"Mod \"{mod.Name}\" failed to IL edit method \"{il.Method.FullName}\"", innerException) {
-		
+		MonoModHooks.DumpIL(mod, il);
 	}
 }

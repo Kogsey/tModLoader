@@ -1,12 +1,9 @@
-using Microsoft.Xna.Framework.Audio;
-using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using Terraria.Audio;
 using Terraria.DataStructures;
 using Terraria.GameContent.UI;
 using Terraria.GameContent.UI.States;
@@ -22,7 +19,6 @@ using Terraria.ModLoader.IO;
 using Terraria.ModLoader.UI;
 using Terraria.UI;
 using Terraria.ModLoader.Utilities;
-using Terraria.Initializers;
 using Terraria.Map;
 using Terraria.GameContent.Creative;
 using Terraria.Graphics.Effects;
@@ -457,8 +453,6 @@ public static class ModContent
 
 		NPCLoader.Unload();
 		NPCHeadLoader.Unload();
-		if (!Main.dedServ) // dedicated servers implode with texture swaps and I've never understood why, so here's a fix for that     -thomas
-			TownNPCProfiles.Instance.ResetTexturesAccordingToVanillaProfiles();
 
 		BossBarLoader.Unload();
 		PlayerLoader.Unload();
@@ -525,13 +519,12 @@ public static class ModContent
 		DustLoader.ResizeArrays();
 		TileLoader.ResizeArrays(unloading);
 		WallLoader.ResizeArrays(unloading);
-		TileIO.ResizeArrays();
-		ProjectileLoader.ResizeArrays();
+		ProjectileLoader.ResizeArrays(unloading);
 		NPCLoader.ResizeArrays(unloading);
 		NPCHeadLoader.ResizeAndFillArrays();
 		MountLoader.ResizeArrays();
 		BuffLoader.ResizeArrays();
-		PlayerLoader.RebuildHooks();
+		PlayerLoader.ResizeArrays();
 		PlayerDrawLayerLoader.ResizeArrays();
 		SystemLoader.ResizeArrays();
 
@@ -553,8 +546,6 @@ public static class ModContent
 	/// </summary>
 	internal static void CleanupModReferences()
 	{
-		WorldGen.clearWorld();
-
 		// Clear references to ModPlayer instances
 		for (int i = 0; i < Main.player.Length; i++) {
 			Main.player[i] = new Player();

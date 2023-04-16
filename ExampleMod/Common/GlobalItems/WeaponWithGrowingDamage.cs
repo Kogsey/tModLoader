@@ -28,7 +28,7 @@ namespace ExampleMod.Common.GlobalItems
 
 		public override bool AppliesToEntity(Item entity, bool lateInstantiation) {
 			//Apply to weapons
-			return entity.damage > 0;
+			return lateInstantiation && entity.damage > 0;
 		}
 		public override void LoadData(Item item, TagCompound tag) {
 			experience = 0;
@@ -148,8 +148,14 @@ namespace ExampleMod.Common.GlobalItems
 			}
 		}
 	}
-	public class SnowBallShop : GlobalNPC
+
+	public class DoubleXPSnowBallInExamplePersonShop : GlobalNPC
 	{
+		public override bool IsLoadingEnabled(Mod mod) {
+			// To experiment with this example, you'll need to enable it in the config.
+			return ModContent.GetInstance<ExampleModConfig>().WeaponWithGrowingDamageToggle;
+		}
+
 		public override void ModifyShop(NPCShop shop) {
 			if (shop.NpcType != ModContent.NPCType<ExamplePerson>()) {
 				return;

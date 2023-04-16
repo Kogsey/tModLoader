@@ -8,7 +8,6 @@ using Terraria.ModLoader.IO;
 using Terraria.Utilities;
 using Terraria.ID;
 using Terraria.ModLoader.Core;
-using System;
 
 namespace Terraria.ModLoader;
 
@@ -30,23 +29,10 @@ public abstract class GlobalItem : GlobalType<Item, GlobalItem>
 
 	protected sealed override void Register()
 	{
-		ModTypeLookup<GlobalItem>.Register(this);
-
-		Index = (ushort)ItemLoader.globalItems.Count;
-
-		ItemLoader.globalItems.Add(this);
+		base.Register();
 	}
 
 	public sealed override void SetupContent() => SetStaticDefaults();
-
-	public GlobalItem Instance(Item item) => Instance(item.globalItems, Index);
-
-	/// <summary>
-	/// Allows you to set the properties of any and every item that gets created.
-	/// </summary>
-	public virtual void SetDefaults(Item item)
-	{
-	}
 
 	public virtual void OnCreated(Item item, ItemCreationContext context)
 	{
@@ -1058,7 +1044,8 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	}
 
 	/// <summary>
-	/// This is essentially the same as Mod.AddRecipes or ModItem.AddRecipes. Use whichever method makes organizational sense for your mod.
+	/// Override this method to add <see cref="Recipe"/>s to the game.<br/>
+	/// The <see href="https://github.com/tModLoader/tModLoader/wiki/Basic-Recipes">Basic Recipes Guide</see> teaches how to add new recipes to the game and how to manipulate existing recipes.<br/>
 	/// </summary>
 	public virtual void AddRecipes()
 	{
