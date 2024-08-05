@@ -179,13 +179,6 @@ public partial class Player : IEntityWithInstances<ModPlayer>
 	public Item QuickSpawnItemDirect(IEntitySource source, int type, int stack = 1)
 		=> Main.item[QuickSpawnItem(source, type, stack)];
 
-	/// <summary> Returns whether or not this Player currently has a (de)buff of the provided type. </summary>
-	public bool HasBuff(int type) => FindBuffIndex(type) != -1;
-
-	/// <inheritdoc cref="HasBuff(int)" />
-	public bool HasBuff<T>() where T : ModBuff
-		=> HasBuff(ModContent.BuffType<T>());
-
 	// Damage Classes
 
 	private DamageClassData[] damageData;
@@ -673,4 +666,10 @@ public partial class Player : IEntityWithInstances<ModPlayer>
 		if (anyJumpCancelled)
 			jump = 0;
 	}
+
+	public override bool[] BuffImmune => buffImmune;
+	public override int[] BuffType => buffType;
+	public override int[] BuffTime => buffTime;
+
+	public override void AddBuff(int type, int time, bool quiet = false) => AddBuff(type, time, quiet);
 }

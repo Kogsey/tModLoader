@@ -28,7 +28,7 @@
  namespace Terraria;
  
 -public class Player : Entity, IFixLoadedData
-+public partial class Player : Entity, IFixLoadedData
++public partial class Player : DamageableEntity, IFixLoadedData
  {
  	public static class BuilderAccToggleIDs
  	{
@@ -1278,7 +1278,7 @@
  			float debuffTimeMultiplier = Main.GameModeInfo.DebuffTimeMultiplier;
  			if (Main.GameModeInfo.IsJourneyMode) {
  				if (Main.masterMode)
-@@ -3054,6 +_,10 @@
+@@ -3054,7 +_,11 @@
  		return num;
  	}
  
@@ -1286,10 +1286,12 @@
 +	/// Removes the buff at the provided index in <see cref="buffType"/> and <see cref="buffTime"/> and shuffles the remaining buff indexes down to fill the gap. Use <see cref="Player.ClearBuff(int)"/> if you only know the <see cref="BuffID"/>.
 +	/// </summary>
 +	/// <param name="b">The index in <see cref="buffType"/> of the buff to remove.</param>
- 	public void DelBuff(int b)
+-	public void DelBuff(int b)
++	public override void DelBuff(int b)
  	{
  		buffTime[b] = 0;
-@@ -3073,8 +_,16 @@
+ 		buffType[b] = 0;
+@@ -3073,15 +_,23 @@
  		}
  	}
  
@@ -1297,7 +1299,8 @@
 +	/// Removes the provided buff type from the player and shuffles the remaining buff indexes down to fill the gap. Use <see cref="Player.DelBuff(int)"/> if you only know the buff index
 +	/// </summary>
 +	/// <param name="type">The buff type</param>
- 	public void ClearBuff(int type)
+-	public void ClearBuff(int type)
++	public override void ClearBuff(int type)
  	{
 +		//TML: Small optimization.
 +		if (type == 0)
@@ -1306,6 +1309,14 @@
  		for (int i = 0; i < maxBuffs; i++) {
  			if (buffType[i] == type)
  				DelBuff(i);
+ 		}
+ 	}
+ 
+-	public int CountBuffs()
++	public override int CountBuffs()
+ 	{
+ 		int num = 0;
+ 		for (int i = 0; i < maxBuffs; i++) {
 @@ -3105,6 +_,7 @@
  		if (item.potion)
  			ApplyPotionDelay(item);

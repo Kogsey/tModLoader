@@ -18,7 +18,7 @@
  namespace Terraria;
  
 -public class NPC : Entity
-+public partial class NPC : Entity
++public partial class NPC : DamageableEntity
  {
  	private const int NPC_TARGETS_START = 300;
  	public bool IsABestiaryIconDummy;
@@ -2585,7 +2585,16 @@
  	public static int FindFirstNPC(int Type)
  	{
  		for (int i = 0; i < 200; i++) {
-@@ -72191,6 +_,14 @@
+@@ -72178,7 +_,7 @@
+ 		return false;
+ 	}
+ 
+-	public int FindBuffIndex(int type)
++	public override int FindBuffIndex(int type)
+ 	{
+ 		if (buffImmune[type])
+ 			return -1;
+@@ -72191,7 +_,15 @@
  		return -1;
  	}
  
@@ -2597,9 +2606,11 @@
 +	/// <param name="type">The buff type</param>
 +	/// <param name="time">The desired buff time in ticks. 60 ticks is 1 second</param>
 +	/// <param name="quiet">If true, the network sync message is skipped.</param>
- 	public void AddBuff(int type, int time, bool quiet = false)
+-	public void AddBuff(int type, int time, bool quiet = false)
++	public override void AddBuff(int type, int time, bool quiet = false)
  	{
  		if (buffImmune[type])
+ 			return;
 @@ -72206,6 +_,9 @@
  		int num = -1;
  		for (int i = 0; i < maxBuffs; i++) {
@@ -2626,7 +2637,7 @@
  			return;
  
  		int num = FindBuffIndex(buffTypeToRemove);
-@@ -72253,6 +_,10 @@
+@@ -72253,7 +_,11 @@
  		}
  	}
  
@@ -2634,9 +2645,11 @@
 +	/// Removes the buff at the provided index and shuffles the remaining buff indexes down to fill the gap. The buff types and times will then be synced to clients. This method should only be called on the server or in single player. 
 +	/// </summary>
 +	/// <param name="buffIndex">The index of the buff to remove.</param>
- 	public void DelBuff(int buffIndex)
+-	public void DelBuff(int buffIndex)
++	public override void DelBuff(int buffIndex)
  	{
  		buffTime[buffIndex] = 0;
+ 		buffType[buffIndex] = 0;
 @@ -72274,6 +_,13 @@
  
  	public Rectangle getRect() => new Rectangle((int)position.X, (int)position.Y, width, height);

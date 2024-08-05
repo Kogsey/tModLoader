@@ -78,13 +78,6 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>
 		thisEntitySourceCache = new EntitySource_Parent(this);
 	}
 
-	/// <summary> Returns whether or not this NPC currently has a (de)buff of the provided type. </summary>
-	public bool HasBuff(int type) => FindBuffIndex(type) != -1;
-
-	/// <inheritdoc cref="HasBuff(int)" />
-	public bool HasBuff<T>() where T : ModBuff
-		=> HasBuff(ModContent.BuffType<T>());
-
 	/// <summary>
 	/// <inheritdoc cref="NPC.NewNPC(IEntitySource, int, int, int, int, float, float, float, float, int)"/>
 	/// <br/><br/>This particular overload returns the actual NPC instance rather than the index of the spawned NPC within the <see cref="Main.npc"/> array.
@@ -319,5 +312,36 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>
 
 		if (Main.netMode == 2)
 			NetMessage.SendData(54, -1, -1, null, whoAmI);
+	}
+
+	public override bool[] BuffImmune => buffImmune;
+	public override int[] BuffType => buffType;
+	public override int[] BuffTime => buffTime;
+
+	/// <summary>
+	/// Removes the provided buff type from the npc and shuffles the remaining buff indexes down to fill the gap. Use <see cref="DelBuff(int)"/> if you only know the buff index
+	/// </summary>
+	/// <param name="type">The buff type</param>
+	public override void ClearBuff(int type)
+	{
+		//TML: Small optimization.
+		if (type == 0)
+			return;
+
+		for (int i = 0; i < maxBuffs; i++) {
+			if (buffType[i] == type)
+				DelBuff(i);
+		}
+	}
+
+	public override int CountBuffs()
+	{
+		int num = 0;
+		for (int i = 0; i < maxBuffs; i++) {
+			if (buffType[num] > 0)
+				num++;
+		}
+
+		return num;
 	}
 }
