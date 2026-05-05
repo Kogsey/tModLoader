@@ -127,7 +127,7 @@
  				theText = RecipeGroup.recipeGroups[num].GetText();
  				return true;
  			}
-@@ -135,7 +_,7 @@
+@@ -135,7 +_,13 @@
  		return false;
  	}
  
@@ -142,7 +142,7 @@
  	{
  		if (customShimmerResults == null)
  			customShimmerResults = new List<Item>();
-@@ -144,9 +_,10 @@
+@@ -144,9 +_,14 @@
  		item.SetDefaults(itemType);
  		item.stack = itemStack;
  		customShimmerResults.Add(item);
@@ -451,7 +451,7 @@
  	{
  		if (ingredients.Length == 1) {
  			ingredients = new int[2] {
-@@ -16789,22 +_,83 @@
+@@ -16789,22 +_,84 @@
  		}
  	}
  

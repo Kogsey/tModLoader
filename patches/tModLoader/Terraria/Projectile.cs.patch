@@ -456,7 +456,7 @@
  	public NPC OwnerMinionAttackTargetNPC {
  		get {
  			if (Main.player[owner].MinionAttackTargetNPC < 0)
-@@ -276,8 +_,46 @@
+@@ -276,8 +_,48 @@
  		}
  	}
  
