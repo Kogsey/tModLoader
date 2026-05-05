@@ -17,6 +17,7 @@ using Terraria.ModLoader.Utilities;
 using HookList = Terraria.ModLoader.Core.GlobalHookList<Terraria.ModLoader.GlobalNPC>;
 using Terraria.ModLoader.IO;
 using Terraria.GameContent.Personalities;
+using System.Diagnostics;
 
 namespace Terraria.ModLoader;
 
@@ -29,8 +30,9 @@ public static class NPCLoader
 	public static int NPCCount { get; private set; } = NPCID.Count;
 	internal static readonly IList<ModNPC> npcs = new List<ModNPC>();
 	internal static readonly IDictionary<int, int> bannerToItem = new Dictionary<int, int>();
+	internal static readonly IDictionary<int, int> itemToBanner = new Dictionary<int, int>();
 	/// <summary>
-	/// Allows you to stop an NPC from dropping loot by adding item IDs to this list. This list will be cleared whenever NPCLoot ends. Useful for either removing an item or change the drop rate of an item in the NPC's loot table. To change the drop rate of an item, use the PreNPCLoot hook, spawn the item yourself, then add the item's ID to this list.
+	/// Allows you to stop an NPC from dropping specific loot by adding item IDs to this list. This list will be cleared whenever NPCLoot ends. Useful for dynamically removing an item in the NPC's loot table. To remove an item drop use the <see cref="ModNPC.PreKill"/> hook to add the item's ID to this list. Editing the drop rules themselves is usually the better and more compatible approach, however.
 	/// </summary>
 	public static readonly IList<int> blockLoot = new List<int>();
 
@@ -85,12 +87,16 @@ public static class NPCLoader
 		Array.Resize(ref Main.npcCatchable, NPCCount);
 		Array.Resize(ref Main.npcFrameCount, NPCCount);
 		Array.Resize(ref Main.SceneMetrics.NPCBannerBuff, NPCCount);
-		Array.Resize(ref NPC.killCount, NPCCount);
+		Array.Resize(ref Main.SceneMetrics.ClosestNPCPosition, NPCCount);
+		Array.Resize(ref BannerSystem.killCount, NPCCount);
 		Array.Resize(ref NPC.ShimmeredTownNPCs, NPCCount);
 		Array.Resize(ref NPC.npcsFoundForCheckActive, NPCCount);
 		Array.Resize(ref Lang._npcNameCache, NPCCount);
 		Array.Resize(ref EmoteBubble.CountNPCs, NPCCount);
 		Array.Resize(ref WorldGen.TownManager._hasRoom, NPCCount);
+		Array.Resize(ref NPCDamageTracker.CustomBossDefinitions, NPCCount);
+		Array.Resize(ref NPCDamageTracker.BossTypeForMob, NPCCount);
+		Array.Resize(ref ConditionalDialogue._registry, NPCCount);
 
 		foreach (var player in Main.player) {
 			Array.Resize(ref player.npcTypeNoAggro, NPCCount);
@@ -100,6 +106,8 @@ public static class NPCLoader
 			Main.npcFrameCount[k] = 1;
 			Lang._npcNameCache[k] = LocalizedText.Empty;
 		}
+
+		ContentSamples.NpcBestiaryRarityStars.Clear();
 	}
 
 	internal static void FinishSetup()
@@ -112,6 +120,14 @@ public static class NPCLoader
 		foreach (ModNPC npc in npcs) {
 			Lang._npcNameCache[npc.Type] = npc.DisplayName;
 			RegisterTownNPCMoodLocalizations(npc);
+
+			// Detect various mismatched Banner/BannerItem issues:
+			// Detect NPC with BannerItem set but Banner not set.
+			// Detect modded Banner values with no associated Banner item.
+			// Detect NPC with BannerItem values that don't match the BannerItem associated with the Banner.
+			if (npc.BannerItem != 0 && npc.Banner == 0 || npc.Banner >= NPCID.Count && (!bannerToItem.ContainsKey(npc.Banner) || npc.BannerItem != 0 && bannerToItem[npc.Banner] != npc.BannerItem)) {
+				Logging.tML.Warn(Language.GetTextValue("tModLoader.LoadWarningBannerOrBannerItemNotSet", npc.Mod.Name, npc.Name));
+			}
 		}
 	}
 
@@ -188,6 +204,11 @@ public static class NPCLoader
 		return npc.type >= NPCID.Count;
 	}
 
+	/// <summary>
+	/// Returns the type of a ModNPC corresponding to the provided banner item type. Note that this is equivalent to the banner type as well, since ModNPC type and banner type are the same. Returns -1 if not found.
+	/// </summary>
+	public static int BannerItemToNPC(int itemType) => itemToBanner.TryGetValue(itemType, out var id) ? id : -1;
+
 	internal static void SetDefaults(NPC npc, bool createModNPC = true)
 	{
 		if (IsModNPC(npc)) {
@@ -201,6 +222,14 @@ public static class NPCLoader
 		}
 
 		GlobalLoaderUtils<GlobalNPC, NPC>.SetDefaults(npc, ref npc._globals, static n => n.ModNPC?.SetDefaults());
+	}
+
+	private static HookList HookSetVariantDefaults = AddHook<Action<NPC>>(g => g.SetDefaultsFromNetId);
+	internal static void SetDefaultsFromNetId(NPC npc)
+	{
+		foreach (var g in HookSetVariantDefaults.Enumerate(npc)) {
+			g.SetDefaultsFromNetId(npc);
+		}
 	}
 
 	private static HookList HookOnSpawn = AddHook<Action<NPC, IEntitySource>>(g => g.OnSpawn);
@@ -331,24 +360,31 @@ public static class NPCLoader
 
 	public static byte[] WriteExtraAI(NPC npc)
 	{
+		// Data is ordered as follows: GlobalProjectile BitWriter, ModProjectile Bytes, GlobalProjectile Bytes
 		using var stream = new MemoryStream();
 		using var modWriter = new BinaryWriter(stream);
 
-		npc.ModNPC?.SendExtraAI(modWriter);
-
 		using var bufferedStream = new MemoryStream();
-		using var globalWriter = new BinaryWriter(bufferedStream);
+		using var binaryWriter = new BinaryWriter(bufferedStream);
 
 		BitWriter bitWriter = new BitWriter();
 
+		npc.ModNPC?.SendExtraAI(binaryWriter);
+
 		foreach (var g in HookSendExtraAI.Enumerate(npc)) {
-			g.SendExtraAI(npc, bitWriter, globalWriter);
+			g.SendExtraAI(npc, bitWriter, binaryWriter);
 		}
 
 		bitWriter.Flush(modWriter);
 		modWriter.Write(bufferedStream.ToArray());
 
-		return stream.ToArray();
+		byte[] bytes = stream.ToArray();
+		// If the only byte is the bitWriter.Flush length byte, no extra data.
+		if (bytes.Length == 1) {
+			Debug.Assert(bytes[0] == 0);
+			return null;
+		}
+		return bytes;
 	}
 
 	public static byte[] ReadExtraAI(BinaryReader reader)
@@ -363,14 +399,15 @@ public static class NPCLoader
 		using var stream = extraAI.ToMemoryStream();
 		using var modReader = new BinaryReader(stream);
 
-		npc.ModNPC?.ReceiveExtraAI(modReader);
-
-		BitReader bitReader = new BitReader(modReader);
-
-		bool anyGlobals = false;
+		GlobalNPC lastGlobalNPC = null;
 		try {
+			BitReader bitReader = new BitReader(modReader);
+
+			var bitReaderEnd = stream.Position;
+			npc.ModNPC?.ReceiveExtraAI(modReader);
+
 			foreach (var g in HookReceiveExtraAI.Enumerate(npc)) {
-				anyGlobals = true;
+				lastGlobalNPC = g;
 				g.ReceiveExtraAI(npc, bitReader, modReader);
 			}
 
@@ -379,19 +416,21 @@ public static class NPCLoader
 			}
 
 			if (stream.Position < stream.Length) {
-				throw new IOException($"Read underflow {stream.Length - stream.Position} of {stream.Length} bytes in ReceiveExtraAI, more info below");
+				throw new IOException($"Read underflow {stream.Length - stream.Position} of {stream.Length - bitReaderEnd} bytes in ReceiveExtraAI, more info below");
 			}
 		}
-		catch (Exception e) {
+		catch (Exception) {
 			string message = $"Error in ReceiveExtraAI for NPC {npc.ModNPC?.FullName ?? npc.TypeName}";
-			if (anyGlobals) {
+			if (lastGlobalNPC != null) {
 				message += ", may be caused by one of these GlobalNPCs:";
 				foreach (var g in HookReceiveExtraAI.Enumerate(npc)) {
 					message += $"\n\t{g.FullName}";
+					if (lastGlobalNPC == g)
+						break;
 				}
 			}
 
-			Logging.tML.Error(message, e);
+			Logging.tML.Error(message);
 		}
 	}
 
@@ -532,6 +571,7 @@ public static class NPCLoader
 	public static void BossLoot(NPC npc, ref string name, ref int potionType)
 	{
 		npc.ModNPC?.BossLoot(ref name, ref potionType);
+		npc.ModNPC?.BossLoot(ref potionType);
 	}
 
 	private static HookList HookCanFallThroughPlatforms = AddHook<Func<NPC, bool?>>(g => g.CanFallThroughPlatforms);
@@ -595,9 +635,9 @@ public static class NPCLoader
 			g.OnCaughtBy(npc, player, item, failed);
 		}
 	}
-		
+
 	private static HookList HookPickEmote = AddHook<Func<NPC, Player, List<int>, WorldUIAnchor, int?>>(g => g.PickEmote);
-		
+
 	public static int? PickEmote(NPC npc, Player closestPlayer, List<int> emoteList, WorldUIAnchor anchor) {
 		int? result = null;
 
@@ -981,6 +1021,15 @@ public static class NPCLoader
 		Main.instance.DrawHealthBar(position.X, position.Y, npc.life, npc.lifeMax, alpha, scale);
 	}
 
+	private static HookList HookEditSpawnFlags = AddHook<Action<NPC.Spawner>>(g => g.EditSpawnFlags);
+
+	public static void EditSpawnFlags(NPC.Spawner spawner)
+	{
+		foreach (var g in HookEditSpawnFlags.Enumerate()) {
+			g.EditSpawnFlags(spawner);
+		}
+	}
+
 	private delegate void DelegateEditSpawnRate(Player player, ref int spawnRate, ref int maxSpawns);
 	private static HookList HookEditSpawnRate = AddHook<DelegateEditSpawnRate>(g => g.EditSpawnRate);
 
@@ -1003,23 +1052,32 @@ public static class NPCLoader
 		}
 	}
 
-	private static HookList HookEditSpawnPool = AddHook<Action<Dictionary<int, float>, NPCSpawnInfo>>(g => g.EditSpawnPool);
+	private static HookList HookEditSpawnInfo = AddHook<Action<NPC.Spawner>>(g => g.EditSpawnInfo);
 
-	public static int? ChooseSpawn(NPCSpawnInfo spawnInfo)
+	public static void EditSpawnInfo(NPC.Spawner spawner)
+	{
+		foreach (var g in HookEditSpawnInfo.Enumerate()) {
+			g.EditSpawnInfo(spawner);
+		}
+	}
+
+	private static HookList HookEditSpawnPool = AddHook<Action<Dictionary<int, float>, NPC.Spawner>>(g => g.EditSpawnPool);
+
+	public static int? ChooseSpawn(NPC.Spawner spawner)
 	{
 		NPCSpawnHelper.Reset();
-		NPCSpawnHelper.DoChecks(spawnInfo);
+		NPCSpawnHelper.DoChecks(spawner);
 
 		IDictionary<int, float> pool = new Dictionary<int, float>();
 		pool[0] = 1f;
 		foreach (ModNPC npc in npcs) {
-			float weight = npc.SpawnChance(spawnInfo);
+			float weight = npc.SpawnChance(spawner);
 			if (weight > 0f) {
 				pool[npc.NPC.type] = weight;
 			}
 		}
 		foreach (var g in HookEditSpawnPool.Enumerate()) {
-			g.EditSpawnPool(pool, spawnInfo);
+			g.EditSpawnPool(pool, spawner);
 		}
 		float totalWeight = 0f;
 		foreach (int type in pool.Keys) {
@@ -1111,6 +1169,18 @@ public static class NPCLoader
 		foreach (var g in HookModifyHoverBoundingBox.Enumerate(npc)) {
 			g.ModifyHoverBoundingBox(npc, ref boundingBox);
 		}
+	}
+
+	private delegate bool DelegatePreHoverInteract(NPC npc, bool mouseIntersects);
+	private static HookList HookPreHoverInteract = AddHook<DelegatePreHoverInteract>(g => g.PreHoverInteract);
+	public static bool PreHoverInteract(NPC npc, bool mouseIntersects)
+	{
+		foreach (var g in HookPreHoverInteract.Enumerate(npc)) {
+			if (!g.PreHoverInteract(npc, mouseIntersects))
+				return false;
+		}
+
+		return npc.ModNPC?.PreHoverInteract(mouseIntersects) ?? true;
 	}
 
 	private static HookList HookModifyNPCNameList = AddHook<Action<NPC, List<string>>>(g => g.ModifyNPCNameList);
@@ -1290,6 +1360,20 @@ public static class NPCLoader
 			g.BuffTownNPC(ref damageMult, ref defense);
 		}
 	}
+
+	private delegate bool DelegateModifyDeathMessage(NPC npc, ref NetworkText custom, ref Color color);
+	private static HookList HookModifyDeathMessage = AddHook<DelegateModifyDeathMessage>(g => g.ModifyDeathMessage);
+
+	public static bool ModifyDeathMessage(NPC npc, ref NetworkText customText, ref Color color)
+	{
+		foreach (var g in HookModifyDeathMessage.Enumerate()) {
+			if (!g.ModifyDeathMessage(npc, ref customText, ref color))
+				return true;
+		}
+
+		return !npc.ModNPC?.ModifyDeathMessage(ref customText, ref color) ?? false;
+	}
+
 	//attack type 0 = throwing
 	//  num405 = type, num406 = damage, knockBack, scaleFactor7 = speed multiplier, num407 = attack delay
 	//  num408 = unknown, maxValue3 = unknown, num409 = gravity correction factor, num411 = random speed offset
@@ -1480,5 +1564,41 @@ public static class NPCLoader
 
 		foreach (var g in HookOnShimmer.Enumerate(npc))
 			g.OnShimmer(npc);
+	}
+
+	private delegate void DelegateChatBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects);
+	private static HookList HookChatBubblePosition = AddHook<DelegateChatBubblePosition>(g => g.ChatBubblePosition);
+
+	public static void ChatBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
+	{
+		npc.ModNPC?.ChatBubblePosition(ref position, ref spriteEffects);
+
+		foreach (var g in HookChatBubblePosition.Enumerate(npc)) {
+			g.ChatBubblePosition(npc, ref position, ref spriteEffects);
+		}
+	}
+
+	private delegate void DelegatePartyHatPosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects);
+	private static HookList HookPartyHatPosition = AddHook<DelegatePartyHatPosition>(g => g.PartyHatPosition);
+
+	public static void PartyHatPosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
+	{
+		npc.ModNPC?.PartyHatPosition(ref position, ref spriteEffects);
+
+		foreach (var g in HookPartyHatPosition.Enumerate(npc)) {
+			g.PartyHatPosition(npc, ref position, ref spriteEffects);
+		}
+	}
+
+	private delegate void DelegateEmoteBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects);
+	private static HookList HookEmoteBubblePosition = AddHook<DelegateEmoteBubblePosition>(g => g.EmoteBubblePosition);
+
+	public static void EmoteBubblePosition(NPC npc, ref Vector2 position, ref SpriteEffects spriteEffects)
+	{
+		npc.ModNPC?.EmoteBubblePosition(ref position, ref spriteEffects);
+
+		foreach (var g in HookEmoteBubblePosition.Enumerate(npc)) {
+			g.EmoteBubblePosition(npc, ref position, ref spriteEffects);
+		}
 	}
 }

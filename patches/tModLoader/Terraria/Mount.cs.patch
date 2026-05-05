@@ -1,36 +1,47 @@
 --- src/TerrariaNetCore/Terraria/Mount.cs
 +++ src/tModLoader/Terraria/Mount.cs
-@@ -10,6 +_,7 @@
- using Terraria.GameContent.Drawing;
+@@ -12,6 +_,8 @@
+ using Terraria.GameInput;
  using Terraria.Graphics.Shaders;
  using Terraria.ID;
 +using Terraria.ModLoader;
++using static Terraria.ModLoader.BackupIO;
  
  namespace Terraria;
  
-@@ -89,8 +_,10 @@
- 		}
- 	}
+@@ -111,10 +_,14 @@
  
--	private class MountData
-+	public class MountData
+ 	public class MountData
  	{
 +		public ModMount ModMount { get; set; }
 +
++		/// <summary> Texture drawn behind the player while in use. </summary>
  		public Asset<Texture2D> backTexture = Asset<Texture2D>.Empty;
  		public Asset<Texture2D> backTextureGlow = Asset<Texture2D>.Empty;
  		public Asset<Texture2D> backTextureExtra = Asset<Texture2D>.Empty;
-@@ -150,7 +_,8 @@
- 		public int dashingFrameCount;
- 		public int dashingFrameDelay;
- 		public bool Minecart;
-+		//TODO TML: Made internal, will go away in 1.4.5
--		public bool MinecartDirectional;
-+		internal bool MinecartDirectional;
- 		public Vector3 lightColor = Vector3.One;
+ 		public Asset<Texture2D> backTextureExtraGlow = Asset<Texture2D>.Empty;
++		/// <summary> Texture drawn in front of the player while in use. </summary>
+ 		public Asset<Texture2D> frontTexture = Asset<Texture2D>.Empty;
+ 		public Asset<Texture2D> frontTextureGlow = Asset<Texture2D>.Empty;
+ 		public Asset<Texture2D> frontTextureExtra = Asset<Texture2D>.Empty;
+@@ -178,6 +_,16 @@
  		public bool emitsLight;
  		public MountDelegatesData delegations = new MountDelegatesData();
-@@ -168,7 +_,7 @@
+ 		public int playerXOffset;
++		/// <summary> Alternate <see cref="runSpeed"/> for this minecart while the <see href="https://terraria.wiki.gg/wiki/Minecart_Upgrade_Kit">Minecart Upgrade Kit</see> is active. Defaults to <c>20f</c>.</summary>
++		public float MinecartUpgradeRunSpeed = 20f;
++		/// <summary> Alternate <see cref="acceleration"/> for this minecart while the <see href="https://terraria.wiki.gg/wiki/Minecart_Upgrade_Kit">Minecart Upgrade Kit</see> is active. Defaults to <c>0.1f</c>.</summary>
++		public float MinecartUpgradeAcceleration = 0.1f;
++		/// <summary> Alternate <see cref="jumpSpeed"/> for this minecart while the <see href="https://terraria.wiki.gg/wiki/Minecart_Upgrade_Kit">Minecart Upgrade Kit</see> is active. Defaults to <c>5.15f</c>.</summary>
++		public float MinecartUpgradeJumpSpeed = 5.15f;
++		/// <summary> Alternate <see cref="dashSpeed"/> for this minecart while the <see href="https://terraria.wiki.gg/wiki/Minecart_Upgrade_Kit">Minecart Upgrade Kit</see> is active. Defaults to <c>20f</c>.</summary>
++		public float MinecartUpgradeDashSpeed = 20f;
++		/// <summary> Alternate <see cref="jumpHeight"/> for this minecart while the <see href="https://terraria.wiki.gg/wiki/Minecart_Upgrade_Kit">Minecart Upgrade Kit</see> is active. Defaults to <c>15</c>.</summary>
++		public int MinecartUpgradeJumpHeight = 15;
+ 	}
+ 
+ 	public enum DismountCheckResult
+@@ -198,7 +_,7 @@
  	public const int DrawBackExtra = 1;
  	public const int DrawFront = 2;
  	public const int DrawFrontExtra = 3;
@@ -39,7 +50,7 @@
  	private static Vector2[] scutlixEyePositions;
  	private static Vector2 scutlixTextureSize;
  	public const int scutlixBaseDamage = 50;
-@@ -182,29 +_,29 @@
+@@ -212,34 +_,39 @@
  	public static int amountOfBeamsAtOnce = 2;
  	public const float maxDrillLength = 48f;
  	private static Vector2 santankTextureSize;
@@ -83,37 +94,78 @@
 +	public bool _aiming;
 -	private bool _shouldSuperCart;
 +	public bool _shouldSuperCart;
+-	private int _walkingGraceTimeLeft;
++	public int _walkingGraceTimeLeft;
  	public List<DrillDebugDraw> _debugDraw;
 -	private object _mountSpecificData;
 +	public object _mountSpecificData;
 -	private bool _active;
 +	public bool _active;
++	[Obsolete("Unused, use MountData.MinecartUpgradeRunSpeed instead")]
  	public static float SuperCartRunSpeed = 20f;
++	[Obsolete("Unused, use MountData.MinecartUpgradeDashSpeed instead")]
  	public static float SuperCartDashSpeed = 20f;
++	[Obsolete("Unused, use MountData.MinecartUpgradeAcceleration instead")]
  	public static float SuperCartAcceleration = 0.1f;
-@@ -2013,7 +_,7 @@
++	[Obsolete("Unused, use MountData.MinecartUpgradeJumpHeight instead")]
+ 	public static int SuperCartJumpHeight = 15;
++	[Obsolete("Unused, use MountData.MinecartUpgradeJumpSpeed instead")]
+ 	public static float SuperCartJumpSpeed = 5.15f;
+ 	private MountDelegatesData _defaultDelegatesData = new MountDelegatesData();
+ 	public static int[] idleFrames_Rat = new int[11] {
+@@ -256,6 +_,7 @@
+ 		0
+ 	};
+ 
++	/// <summary> True if the player is currently using a mount. </summary>
+ 	public bool Active => _active;
+ 
+ 	public int Type => _type;
+@@ -331,7 +_,7 @@
+ 				return _data.runSpeed + 2f;
+ 
+ 			if (_shouldSuperCart)
+-				return SuperCartRunSpeed;
++				return _data.MinecartUpgradeRunSpeed;
+ 
+ 			return _data.runSpeed;
+ 		}
+@@ -340,7 +_,7 @@
+ 	public float DashSpeed {
+ 		get {
+ 			if (_shouldSuperCart)
+-				return SuperCartDashSpeed;
++				return _data.MinecartUpgradeDashSpeed;
+ 
+ 			return _data.dashSpeed;
+ 		}
+@@ -349,7 +_,7 @@
+ 	public float Acceleration {
+ 		get {
+ 			if (_shouldSuperCart)
+-				return SuperCartAcceleration;
++				return _data.MinecartUpgradeAcceleration;
+ 
+ 			return _data.acceleration;
+ 		}
+@@ -2511,6 +_,16 @@
  		}
  	}
  
--	private static void SetAsHorse(MountData newMount, int buff, Asset<Texture2D> texture)
-+	public static void SetAsHorse(MountData newMount, int buff, Asset<Texture2D> texture)
- 	{
- 		newMount.spawnDust = 3;
- 		newMount.buff = buff;
-@@ -2075,6 +_,12 @@
- 		}
- 	}
- 
-+	//TODO 1.4.5: Vanilla will remove the 2 buff overload
-+	public static void SetAsMinecart(MountData newMount, int buff, Asset<Texture2D> texture, int verticalOffset = 0, int playerVerticalOffset = 0)
-+	{
-+		SetAsMinecart(newMount, buff, buff, texture, verticalOffset, playerVerticalOffset);
-+	}
-+
- 	private static void SetAsMinecart(MountData newMount, int buffToLeft, int buffToRight, Asset<Texture2D> texture, int verticalOffset = 0, int playerVerticalOffset = 0)
++	/// <summary>
++	/// This method sets a variety of MountData values common to most minecarts.
++	/// <para/>Notably:<code>
++	/// runSpeed = 13f;
++	/// dashSpeed = 13f;
++	/// acceleration = 0.04f;
++	/// jumpHeight = 15;
++	/// jumpSpeed = 5.15f;
++	/// </code>
++	/// </summary>
+ 	public static void SetAsMinecart(MountData newMount, int buff, Asset<Texture2D> texture, int verticalOffset = 0, int playerVerticalOffset = 0)
  	{
  		newMount.Minecart = true;
-@@ -2131,13 +_,14 @@
+@@ -2566,13 +_,14 @@
  
  	public static int GetHeightBoost(int MountType)
  	{
@@ -130,7 +182,7 @@
  	{
  		int num = _data.jumpHeight;
  		switch (_type) {
-@@ -2152,15 +_,18 @@
+@@ -2587,15 +_,18 @@
  				if (_frameState == 4)
  					num += 5;
  				break;
@@ -138,7 +190,8 @@
  		}
  
  		if (_shouldSuperCart)
- 			num = SuperCartJumpHeight;
+-			num = SuperCartJumpHeight;
++			num = _data.MinecartUpgradeJumpHeight;
  
 +		MountLoader.JumpHeight(player, _data, ref num, xVelocity);
  		return num;
@@ -150,7 +203,7 @@
  	{
  		float num = _data.jumpSpeed;
  		switch (_type) {
-@@ -2173,10 +_,13 @@
+@@ -2608,10 +_,13 @@
  				if (_frameState == 4)
  					num += 2.5f;
  				break;
@@ -158,13 +211,14 @@
  		}
  
  		if (_shouldSuperCart)
- 			num = SuperCartJumpSpeed;
-+		
+-			num = SuperCartJumpSpeed;
++			num = _data.MinecartUpgradeJumpSpeed;
++
 +		MountLoader.JumpSpeed(player, _data, ref num, xVelocity);
  
  		return num;
  	}
-@@ -2503,7 +_,10 @@
+@@ -2975,7 +_,10 @@
  						Vector2 vector = mountedPlayer.Center + new Vector2(mountedPlayer.width * -mountedPlayer.direction, 26f);
  						Vector2 vector2 = new Vector2(0f, -4f).RotatedByRandom(0.10000000149011612);
  						Projectile.NewProjectile(GetProjectileSpawnSource(mountedPlayer), vector.X, vector.Y, vector2.X, vector2.Y, 930, damage, 0f, Main.myPlayer);
@@ -175,7 +229,7 @@
  					}
  
  					int type = 14;
-@@ -2518,7 +_,10 @@
+@@ -2990,7 +_,10 @@
  					v *= 12f;
  					v = v.RotatedByRandom(0.20000000298023224);
  					Projectile.NewProjectile(GetProjectileSpawnSource(mountedPlayer), vector4.X, vector4.Y, v.X, v.Y, type, damage2, 0f, Main.myPlayer);
@@ -186,7 +240,7 @@
  				}
  				break;
  			case 8:
-@@ -2719,6 +_,9 @@
+@@ -3221,6 +_,9 @@
  
  	public void UpdateFrame(Player mountedPlayer, int state, Vector2 velocity)
  	{
@@ -194,9 +248,9 @@
 +			return;
 +
  		if (_frameState != state) {
- 			_frameState = state;
- 			if (_type != 48 || (state != 1 && state != 2))
-@@ -3473,7 +_,7 @@
+ 			if (_type == 56 && ((_frameState == 5 && (mountedPlayer.dash <= 0 || mountedPlayer.dashDelay >= 0)) || (_frameState != 5 && mountedPlayer.dash > 0 && mountedPlayer.dashDelay < 0)))
+ 				_frameCounter = 0f;
+@@ -4114,7 +_,7 @@
  
  		Tile tileSafely = Framing.GetTileSafely(p.X, p.Y);
  		if (WorldGen.SolidTile(p)) {
@@ -205,7 +259,7 @@
  			if (num > 1)
  				num = 1;
  
-@@ -3588,6 +_,9 @@
+@@ -4229,6 +_,9 @@
  	{
  		mountedPlayer.autoJump = AutoJump;
  		_shouldSuperCart = MountID.Sets.Cart[_type] && mountedPlayer.UsingSuperCart;
@@ -215,9 +269,23 @@
  		if (_shouldSuperCart) {
  			CastSuperCartLaser(mountedPlayer);
  			float num = 1f + Math.Abs(mountedPlayer.velocity.X) / RunSpeed * 2.5f;
-@@ -3747,10 +_,13 @@
+@@ -4238,10 +_,13 @@
+ 		switch (_type) {
+ 			case 62:
+ 			case 63:
++				mountedPlayer.allDamage += 0.1f;
++				/*
+ 				mountedPlayer.meleeDamage += 0.1f;
+ 				mountedPlayer.rangedDamage += 0.1f;
+ 				mountedPlayer.magicDamage += 0.1f;
+ 				mountedPlayer.minionDamage += 0.1f;
++				*/
+ 				break;
+ 			case 23: {
+ 				Vector2 pos3 = mountedPlayer.Center + GetWitchBroomTrinketOriginOffset(mountedPlayer) + (GetWitchBroomTrinketRotation(mountedPlayer) + (float)Math.PI / 2f).ToRotationVector2() * 11f;
+@@ -4395,10 +_,13 @@
  					else
- 						Lighting.AddLight(mountedPlayer.Center + Vector2.UnitX * mountedPlayer.direction * 20f, vector9.X, vector9.Y, vector9.Z);
+ 						Lighting.AddLight(mountedPlayer.Center + Vector2.UnitX * mountedPlayer.direction * 20f, vector10.X, vector10.Y, vector10.Z);
  
 +					mountedPlayer.allDamage += 0.15f;
 +					/*
@@ -229,7 +297,7 @@
  				}
  				if (mountedPlayer.statLife <= mountedPlayer.statLifeMax2 / 2)
  					mountedPlayer.MountFishronSpecialCounter = 60f;
-@@ -4009,6 +_,9 @@
+@@ -4698,6 +_,9 @@
  	public bool AimAbility(Player mountedPlayer, Vector2 mousePosition)
  	{
  		_aiming = true;
@@ -239,7 +307,7 @@
  		switch (_type) {
  			case 9: {
  				int frameExtra = _frameExtra;
-@@ -4171,7 +_,11 @@
+@@ -4860,7 +_,11 @@
  		}
  
  		int type = _type;
@@ -251,67 +319,62 @@
  			PlayerQueenSlimeMountTextureContent queenSlimeMount = TextureAssets.RenderTargets.QueenSlimeMount;
  			queenSlimeMount.Request();
  			if (queenSlimeMount.IsReady)
-@@ -4473,10 +_,13 @@
+@@ -5213,10 +_,13 @@
  				break;
  		}
  
-+		flag2 = !MountLoader.Draw(this, playerDrawData, drawType, drawPlayer, ref texture2D, ref texture2D2, ref Position, ref value, ref drawColor, ref color, ref num9, ref spriteEffects, ref origin, ref scale, shadow);
++		flag2 = !MountLoader.Draw(this, playerDrawData, drawType, drawPlayer, ref texture2D, ref texture2D2, ref Position, ref value2, ref drawColor, ref color, ref num9, ref spriteEffects, ref origin, ref scale, shadow);
 +
  		if (!flag2) {
- 			DrawData item = new DrawData(texture2D, Position, value, drawColor, num9, origin, scale, spriteEffects);
+ 			DrawData item = new DrawData(texture2D, Position, value2, drawColor, num9, origin, scale, spriteEffects);
  			item.shader = currentShader;
  			playerDrawData.Add(item);
 +			// Patch note: num9 is used above.
  			if (texture2D2 != null) {
- 				item = new DrawData(texture2D2, Position, value, color * ((float)(int)drawColor.A / 255f), num9, origin, scale, spriteEffects);
+ 				item = new DrawData(texture2D2, Position, value2, color * ((float)(int)drawColor.A / 255f), num9, origin, scale, spriteEffects);
  				item.shader = currentShader;
-@@ -4612,6 +_,10 @@
- 			bool cart = Cart;
- 			_active = false;
- 			mountedPlayer.ClearBuff(_data.buff);
+@@ -5402,6 +_,10 @@
+ 		bool cart = Cart;
+ 		_active = false;
+ 		mountedPlayer.ClearBuff(_data.buff);
 +
-+			bool skipDust = false;
-+			MountLoader.Dismount(this, mountedPlayer, ref skipDust);
++		bool skipDust = false;
++		MountLoader.Dismount(this, mountedPlayer, ref skipDust);
 +
- 			_mountSpecificData = null;
- 			_ = _type;
- 			if (cart) {
-@@ -4622,7 +_,13 @@
+ 		_mountSpecificData = null;
+ 		int type = _type;
+ 		if ((uint)(type - 55) <= 1u && mountedPlayer.noItems && !mountedPlayer.cursed)
+@@ -5417,7 +_,7 @@
+ 		if (mountedPlayer.petting.isPetting && mountedPlayer.petting.mount)
+ 			mountedPlayer.StopPettingAnimal();
  
- 			mountedPlayer.fullRotation = 0f;
- 			mountedPlayer.fullRotationOrigin = Vector2.Zero;
-+
-+			if (skipDust)
-+				goto PostDustSpawn;
-+			
+-		if (!ignoreEffect)
++		if (!ignoreEffect && !skipDust)
  			DoSpawnDust(mountedPlayer, isDismounting: true);
-+			PostDustSpawn:
-+
- 			Reset();
- 			mountedPlayer.position.Y += mountedPlayer.height;
- 			mountedPlayer.height = 42;
-@@ -4634,7 +_,7 @@
  
- 	public void SetMount(int m, Player mountedPlayer, bool faceLeft = false)
+ 		Reset();
+@@ -5443,7 +_,7 @@
+ 
+ 	public void SetMount(int m, Player mountedPlayer)
  	{
 -		if (_type == m || m <= -1 || m >= MountID.Count || (m == 5 && mountedPlayer.wet))
 +		if (_type == m || m <= -1 || m >= mounts.Length || (m == 5 && mountedPlayer.wet))
  			return;
  
  		if (_active) {
-@@ -4701,7 +_,15 @@
- 		if (_type == 35)
- 			_mountSpecificData = new ExtraFrameMountData();
+@@ -5533,7 +_,15 @@
+ 			_mountSpecificData = new SelectiveFlyingMountData();
  
+ 		FinalizeMountData(m, mountedPlayer);
 +		bool skipDust = false;
 +		MountLoader.SetMount(this, mountedPlayer, ref skipDust);
 +
 +		if (skipDust)
 +			goto PostDustSpawn;
-+		
++
  		DoSpawnDust(mountedPlayer, isDismounting: false);
 +		PostDustSpawn:
 +
- 		if (mountedPlayer.whoAmI == Main.myPlayer)
- 			NetMessage.SendData(13, -1, -1, null, mountedPlayer.whoAmI);
+ 		if (_type == 38 && mountedPlayer.whoAmI == Main.myPlayer)
+ 			AchievementsHelper.NotifyProgressionEvent(32);
  	}

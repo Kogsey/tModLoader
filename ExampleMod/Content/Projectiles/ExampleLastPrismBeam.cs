@@ -261,13 +261,13 @@ namespace ExampleMod.Content.Projectiles
 			return Collision.CheckAABBvLineCollision(targetHitbox.TopLeft(), targetHitbox.Size(), Projectile.Center, beamEndPos, BeamHitboxCollisionWidth * Projectile.scale, ref _);
 		}
 
-		public override bool PreDraw(ref Color lightColor) {
+		public override bool PreDraw(Player player, ref Color lightColor) {
 			// If the beam doesn't have a defined direction, don't draw anything.
 			if (Projectile.velocity == Vector2.Zero) {
 				return false;
 			}
 
-			Texture2D texture = TextureAssets.Projectile[Projectile.type].Value;
+			Texture2D texture = TextureAssets.Projectile[Type].Value;
 			Vector2 centerFloored = Projectile.Center.Floor() + Projectile.velocity * Projectile.scale * 10.5f;
 			Vector2 drawScale = new Vector2(Projectile.scale);
 

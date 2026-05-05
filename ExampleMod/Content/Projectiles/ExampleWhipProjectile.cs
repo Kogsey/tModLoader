@@ -85,7 +85,7 @@ namespace ExampleMod.Content.Projectiles
 			}
 		}
 
-		public override bool PreDraw(ref Color lightColor) {
+		public override bool PreDraw(Player player, ref Color lightColor) {
 			List<Vector2> list = new List<Vector2>();
 			Projectile.FillWhipControlPoints(Projectile, list);
 
@@ -98,7 +98,6 @@ namespace ExampleMod.Content.Projectiles
 
 			SpriteEffects flip = Projectile.spriteDirection < 0 ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
 
-			Main.instance.LoadProjectile(Type);
 			Texture2D texture = TextureAssets.Projectile[Type].Value;
 
 			Vector2 pos = list[0];

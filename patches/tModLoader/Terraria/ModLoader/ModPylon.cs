@@ -84,7 +84,7 @@ public abstract class ModPylon : ModTile
 	/// Return null to prevent automatically registering this pylon in shops. <br/>
 	/// By default, the pylon will be sold in all shops when the provided conditions are met, if the pylon has a non-zero item drop.<br/>
 	/// <br/>
-	/// The standard pylon conditions are <see cref="Condition.HappyEnoughToSellPylons"/>, <see cref="Condition.AnotherTownNPCNearby"/>, <see cref="Condition.NotInEvilBiome"/>
+	/// The standard pylon conditions are <see cref="Condition.AnotherTownNPCNearby"/>, <see cref="Condition.NotInEvilBiome"/>
 	/// </summary>
 	public virtual NPCShop.Entry GetNPCShopEntry()
 	{
@@ -93,7 +93,7 @@ public abstract class ModPylon : ModTile
 		if (drop == 0)
 			return null;
 
-		return new NPCShop.Entry(drop, Condition.HappyEnoughToSellPylons, Condition.AnotherTownNPCNearby, Condition.NotInEvilBiome);
+		return new NPCShop.Entry(drop, Condition.AnotherTownNPCNearby, Condition.NotInEvilBiome);
 	}
 
 	/// <summary>
@@ -361,7 +361,7 @@ public abstract class ModPylon : ModTile
 			Main.dust[numForDust].velocity.Y -= 0.2f;
 		}
 
-		// Get color value and draw the the crystal
+		// Get color value and draw the crystal
 		Color color = Lighting.GetColor(point.X, point.Y);
 		color = Color.Lerp(color, Color.White, 0.8f);
 		spriteBatch.Draw(crystalTexture.Value, drawingPosition - Main.screenPosition, crystalFrame, color * 0.7f, 0f, origin, 1f, SpriteEffects.None, 0f);

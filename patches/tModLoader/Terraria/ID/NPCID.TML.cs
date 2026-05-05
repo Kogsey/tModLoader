@@ -14,12 +14,12 @@ public partial class NPCID
 #pragma warning restore CS0618
 		}
 
-		//IDs taken from start of NPC.NewNPC when determining num
 		/// <summary>
-		/// Whether or not the spawned NPC will start looking for a suitable slot from the end of <seealso cref="Main.npc"/>, ignoring the Start parameter of <see cref="NPC.NewNPC"/>.
-		/// Useful if you have a multi-segmented boss and want its parts to draw over the main body (body will be in this set).
+		/// If true, the given Town NPC won't drop a tombstone on death in hardcore mode and will have the "NPC has left!" death message unless specified otherwise by <see cref="ModNPC.DeathMessage"/>.
+		/// <br/> This does NOT affect the gore spawned when the NPC dies.
+		/// <para/> Defaults to <see langword="false"/>.
 		/// </summary>
-		public static bool[] SpawnFromLastEmptySlot = Factory.CreateBoolSet(222, 245);
+		public static bool[] IsTownChild = Factory.CreateBoolSet(Angler, Princess);
 
 		//Default ID is the skeleton merchant
 		/// <summary>
@@ -130,7 +130,7 @@ public partial class NPCID
 		/// <br/> If any NPC in this set is alive and <see cref="InvasionSlotCount"/> is above 0, the Pirate Invasion music will play.
 		/// <br/> Defaults to <see langword="false"/>.
 		/// </summary>
-		public static bool[] BelongsToInvasionPirate = Factory.CreateBoolSet(212, 213, 214, 215, 216, 491);
+		public static bool[] BelongsToInvasionPirate = Factory.CreateBoolSet(212, 213, 214, 215, 216, 491, 492, 252, 662);
 
 		/// <summary>
 		/// If <see langword="true"/> for a given NPC type (<see cref="NPC.type"/>), then that NPC belongs to the Martian Madness invasion.
@@ -138,7 +138,7 @@ public partial class NPCID
 		/// <br/> If any NPC in this set is alive and <see cref="InvasionSlotCount"/> is above 0, the Martian Madness music will play.
 		/// <br/> Defaults to <see langword="false"/>.
 		/// </summary>
-		public static bool[] BelongsToInvasionMartianMadness = Factory.CreateBoolSet(381, 382, 383, 385, 386, 387, 388, 389, 390, 391, 395, 520);
+		public static bool[] BelongsToInvasionMartianMadness = Factory.CreateBoolSet(381, 382, 383, 384, 385, 386, 387, 388, 389, 390, 391, 394, 395, 520);
 
 		// IDs taken from Main.UpdateAudio_DecideOnNewMusic, only if it doesn't appear in any BelongsToInvasion set
 		/// <summary>
@@ -162,5 +162,28 @@ public partial class NPCID
 		/// True if the NPC should not despawn in shimmer if <see cref="NPC.SpawnedFromStatue"/> is true. Defaults to false
 		/// </summary>
 		public static bool[] ShimmerIgnoreNPCSpawnedFromStatue = Factory.CreateBoolSet();
+		
+		// IDs taken from NPC.GetPettingInfo
+		/// <summary>
+		/// While petting, the number of pixels away the player stands from the NPC. Defaults to 36 pixels.
+		/// </summary>
+		public static int[] PlayerDistanceWhilePetting = Factory.CreateIntSet(36, TownCat, 28, TownBunny, 24, TownSlimeBlue, 26, TownSlimeGreen, 26, TownSlimeOld, 26, TownSlimePurple, 26, TownSlimeRainbow, 26, TownSlimeYellow, 26, TownSlimeRed, 22, TownSlimeCopper, 20);
+
+		// IDs taken from NPC.GetPettingInfo
+		/// <summary>
+		/// While petting, the player's arm will be angled up by default. If the NPC is in this set, the player's armor will be angled down instead. Defaults to false.
+		/// </summary>
+		public static bool[] IsPetSmallForPetting = Factory.CreateBoolSet(TownCat, TownBunny, TownSlimeBlue, TownSlimeGreen, TownSlimeOld, TownSlimePurple, TownSlimeRainbow, TownSlimeYellow, TownSlimeRed, TownSlimeCopper);
+
+		/// <summary>
+		/// NPC in this set do not drop resource pickups, such as hearts or star items. Vanilla entries in this set include MotherSlime, CorruptSlime, and Slimer, all of which spawn other NPC when killed, suggesting that they split apart rather than died, hinting at why they shouldn't drop resource pickups.
+		/// <para/> Defaults to false.
+		/// </summary>
+		public static bool[] NeverDropsResourcePickups = Factory.CreateBoolSet(MotherSlime, CorruptSlime, Slimer);
+
+		/// <summary>
+		/// This NPC will not despawn due to being far offscreen, but will still count towards <see cref="Player.nearbyActiveNPCs"/>. Unlike returning false in <see cref="ModNPC.CheckActive"/>, this NPC still counts towards spawn limits. 
+		/// </summary>
+		public static bool[] DoesntDespawnToInactivityAndCountsNPCSlots = Factory.CreateBoolSet(Deerclops);
 	}
 }

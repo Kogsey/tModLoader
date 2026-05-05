@@ -11,7 +11,7 @@ namespace ExampleMod.Content.Items.Consumables
 	{
 		public override void SetStaticDefaults() {
 			Item.ResearchUnlockCount = 3;
-			ItemID.Sets.SortingPriorityBossSpawns[Type] = 12; // This helps sort inventory know that this is a boss summoning Item.
+			ItemID.Sets.SortingPriorityMiscImportants[Type] = 12; // This helps sort inventory know that this is a boss summoning Item.
 
 			// If this would be for a vanilla boss that has no summon item, you would have to include this line here:
 			// NPCID.Sets.MPAllowedEnemies[NPCID.Plantera] = true;
@@ -31,10 +31,14 @@ namespace ExampleMod.Content.Items.Consumables
 			Item.consumable = true;
 		}
 
+		public override void ModifyResearchSorting(ref ContentSamples.CreativeHelper.ItemGroup itemGroup) {
+			itemGroup = ContentSamples.CreativeHelper.ItemGroup.BossSpawners;
+		}
+
 		public override bool CanUseItem(Player player) {
 			// If you decide to use the below UseItem code, you have to include !NPC.AnyNPCs(id), as this is also the check the server does when receiving MessageID.SpawnBoss.
 			// If you want more constraints for the summon item, combine them as boolean expressions:
-			//    return !Main.dayTime && !NPC.AnyNPCs(ModContent.NPCType<MinionBossBody>()); would mean "not daytime and no MinionBossBody currently alive"
+			//    return !Main.IsItDay() && !NPC.AnyNPCs(ModContent.NPCType<MinionBossBody>()); would mean "not daytime and no MinionBossBody currently alive"
 			return !NPC.AnyNPCs(ModContent.NPCType<MinionBossBody>());
 		}
 

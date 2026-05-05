@@ -1,11 +1,12 @@
-using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
+using Microsoft.Xna.Framework;
 using Terraria.DataStructures;
 using Terraria.GameContent.UI.BigProgressBar;
 using Terraria.ID;
 using Terraria.ModLoader;
 using Terraria.ModLoader.Core;
+using Terraria.WorldBuilding;
 
 namespace Terraria;
 
@@ -122,6 +123,28 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>, IModShimmerable
 		bottom.X += direction * directionOffset; // Added to match PlayerSittingHelper
 		bottom += finalOffset; // Added to match PlayerSittingHelper
 	}
+
+	/// <summary>
+	/// A helper method for an NPC striking another NPC.
+	/// <br/><br/> Handles modifiers, hit info, network, and hooks automatically.
+	/// </summary>
+	public void StrikeOtherNPC(NPC target, int damage, float knockback, int hitDirection, bool crit = false, bool randomizeDamage = true)
+	{
+		NPC.HitModifiers modifiers = target.GetIncomingStrikeModifiers(DamageClass.Default, hitDirection, default);
+
+		NPCLoader.ModifyHitNPC(this, target, ref modifiers);
+
+		NPC.HitInfo hitInfo = modifiers.ToHitInfo(damage, crit, knockback, randomizeDamage);
+
+		target.StrikeNPC(hitInfo, false, true);
+
+		if (Main.netMode != 0) {
+			NetMessage.SendStrikeNPC(target, hitInfo);
+		}
+
+		NPCLoader.OnHitNPC(this, target, hitInfo);
+	}
+
 
 	/// <summary>
 	/// Runs most code related to the process of checking whether or not an NPC can be caught.<br></br>
@@ -324,7 +347,7 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>, IModShimmerable
 	/// <param name="buffType"></param>
 	public void BecomeImmuneTo(int buffType)
 	{
-		buffImmune[buffType] = true; 
+		buffImmune[buffType] = true;
 
 		for (int i = 0; i < BuffID.Sets.GrantImmunityWith.Length; i++) {
 			var buffsToInherit = BuffID.Sets.GrantImmunityWith[i];
@@ -335,6 +358,7 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>, IModShimmerable
 		}
 	}
 
+	/// <summary>
 	/// Clears all buffs on this NPC that the NPC is currently immune (<see cref="buffImmune"/>) to. The buff types and times will then be synced to clients. Use after manually changing <see cref="buffImmune"/> or using <see cref="BecomeImmuneTo(int)"/>.<br/><br/>
 	/// <paramref name="anyBuffsCleared"/> will be true if any buffs have been cleared by this method, it can be used to decide to spawn visual effects. Since this method should not be called on multiplayer clients, modders will need to manually sync any visual effects of this. <br/><br/>
 	/// This should not be called on multiplayer clients.
@@ -352,7 +376,7 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>, IModShimmerable
 				anyBuffsCleared = true;
 			}
 
-			if (buffTime[i] == 0 || buffType[i] == 0) { 
+			if (buffTime[i] == 0 || buffType[i] == 0) {
 				for (int j = i + 1; j < maxBuffs; j++) {
 					buffTime[j - 1] = buffTime[j];
 					buffType[j - 1] = buffType[j];
@@ -364,5 +388,33 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>, IModShimmerable
 
 		if (Main.netMode == 2)
 			NetMessage.SendData(54, -1, -1, null, whoAmI);
+	}
+
+	public void CloneDefaults(int Type)
+	{
+		int originalType = type;
+		int originalNetID = netID;
+		var originalModNPC = ModNPC;
+		var originalGlobals = _globals;
+
+		SetDefaultsKeepPlayerInteraction(Type);
+
+		type = originalType;
+		netID = originalNetID;
+		ModNPC = originalModNPC;
+		_globals = originalGlobals;
+	}
+
+	public void SetDefaultsKeepPlayerInteraction(int Type)
+	{
+		bool[] array = new bool[playerInteraction.Length];
+		for (int i = 0; i < playerInteraction.Length; i++) {
+			array[i] = playerInteraction[i];
+		}
+
+		SetDefaults(Type);
+		for (int j = 0; j < playerInteraction.Length; j++) {
+			playerInteraction[j] = array[j];
+		}
 	}
 }

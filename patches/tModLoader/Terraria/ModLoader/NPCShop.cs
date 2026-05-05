@@ -7,17 +7,47 @@ namespace Terraria.ModLoader;
 
 public abstract class AbstractNPCShop
 {
-	public interface Entry
+	public class Entry(Item item, params Condition[] conditions)
 	{
-		public Item Item { get; }
-		public IEnumerable<Condition> Conditions { get; }
+		public Item Item { get; } = item;
+
+		private readonly List<Condition> _conditions = conditions.ToList();
+		public IEnumerable<Condition> Conditions => _conditions;
+
+		public bool Disabled { get; private set; }
+
+		public void Disable() => Disabled = true;
+
+		public void AddCondition(Condition condition)
+		{
+			ArgumentNullException.ThrowIfNull(condition, nameof(condition));
+			_conditions.Add(condition);
+		}
+
+		public bool ConditionsMet()
+		{
+			foreach (var c in _conditions) {
+				if (!c.IsMet())
+					return false;
+			}
+
+			return true;
+		}
 	}
 
 	public int NpcType { get; private init; }
 	public string Name { get; private init; }
 	public string FullName => NPCShopDatabase.GetShopName(NpcType, Name);
 
-	public abstract IEnumerable<Entry> ActiveEntries { get; }
+	protected abstract IEnumerable<Entry> AllEntries { get; }
+
+	public IEnumerable<Entry> ActiveEntries => AllEntries.Where(e => !e.Disabled);
+
+	public virtual void RefreshItems(bool onlyIfVariantChanged = true)
+	{
+		foreach (var entry in AllEntries)
+			entry.Item.Refresh(onlyIfVariantChanged);
+	}
 
 	public AbstractNPCShop(int npcType, string name = "Shop")
 	{
@@ -45,15 +75,14 @@ public abstract class AbstractNPCShop
 	public virtual void FinishSetup() { }
 }
 
-public sealed partial class NPCShop : AbstractNPCShop
+public partial class NPCShop : AbstractNPCShop
 {
 	private List<Entry> _entries;
 
 	public IReadOnlyList<Entry> Entries => _entries;
+	protected override IEnumerable<AbstractNPCShop.Entry> AllEntries => Entries;
 
 	public bool FillLastSlot { get; private set; }
-
-	public override IEnumerable<Entry> ActiveEntries => Entries.Where(e => !e.Disabled);
 
 	public NPCShop(int npcType, string name = "Shop") : base(npcType, name)
 	{
@@ -88,8 +117,19 @@ public sealed partial class NPCShop : AbstractNPCShop
 		return this;
 	}
 
+	/// <summary>
+	/// <inheritdoc cref="Add(int, Condition[])"/>
+	/// <para/> This overload takes an <see cref="Item"/> instance instead of just an item type. This Item can be customized prior to being registered. This is commonly used to provide a custom shop price or currency for this shop entry:
+	/// <code>npcShop.Add(new Item(ItemID.MagicDagger) {
+	///		shopCustomPrice = 2,
+	///		shopSpecialCurrency = ExampleMod.ExampleCustomCurrencyId
+	///	}, Condition.RemixWorld);
+	/// </code>
+	/// </summary>
 	public NPCShop Add(Item item, params Condition[] condition) => Add(new Entry(item, condition));
-	public NPCShop Add(int item, params Condition[] condition) => Add(ContentSamples.ItemsByType[item], condition);
+	/// <summary> Adds the specified item with the provided conditions to this shop. If all of the conditions are satisfied, the item will be available in the shop. </summary>
+	public NPCShop Add(int item, params Condition[] condition) => Add(new Entry(item, condition));
+	/// <inheritdoc cref="Add(int, Condition[])"/>
 	public NPCShop Add<T>(params Condition[] condition) where T : ModItem => Add(ModContent.ItemType<T>(), condition);
 
 	private NPCShop InsertAt(Entry targetEntry, bool after, Item item, params Condition[] condition) => Add(new Entry(item, condition).SetOrdering(targetEntry, after));

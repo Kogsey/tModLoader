@@ -1,6 +1,6 @@
 --- src/TerrariaNetCore/Terraria/ID/ItemHoldStyleID.cs
 +++ src/tModLoader/Terraria/ID/ItemHoldStyleID.cs
-@@ -1,13 +_,49 @@
+@@ -1,14 +_,50 @@
  namespace Terraria.ID;
  
 +/// <summary>
@@ -11,7 +11,7 @@
  {
 +	/// <summary>
 +	/// Default. No specific animation will happen while this item is held.
-+	/// <br/>Used by any item by default. 
++	/// <br/>Used by any item by default.
 +	/// </summary>
  	public const int None = 0;
 +	/// <summary>
@@ -49,4 +49,5 @@
 +	/// <br/> Used by Kwad Racer Drone
 +	/// </summary>
  	public const int HoldRadio = 7;
+ 	public const int HoldOrb = 8;
  }

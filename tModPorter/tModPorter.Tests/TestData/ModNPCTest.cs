@@ -73,6 +73,10 @@ public class ModNPCTest : ModNPC
 		closeness = 10;
 	}
 
+	public override float SpawnChance(NPCSpawnInfo spawnInfo) {
+		return spawnInfo.Water ? 0f : 1f;
+	}
+
 	public override void SetStaticDefaults() {
 		NPCID.Sets.DebuffImmunitySets.Add(Type, new NPCDebuffImmunityData {
 			SpecificallyImmuneTo = new int[] {
@@ -81,5 +85,9 @@ public class ModNPCTest : ModNPC
 		});
 
 		NPCID.Sets.ShimmerImmunity[Type] = true;
+
+		NPCID.Sets.GoldCrittersCollection.Add(Type);
+
+		NPCID.Sets.SpawnFromLastEmptySlot[Type] = true;
 	}
 }

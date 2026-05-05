@@ -6,12 +6,14 @@ using System.IO;
 using System.Linq;
 using Terraria.GameContent;
 using Terraria.Graphics.Effects;
+using Terraria.ID;
 using Terraria.Localization;
 
 namespace Terraria.ModLoader;
 
 /// <summary>
 /// This is the class that keeps track of all modded background textures and their slots/IDs.
+/// <para/> Remember that unless you manually register backgrounds via <see cref="AddBackgroundTexture(Mod, string)"/>, only files found in a folder or subfolder of a folder named "Backgrounds" will be autoloaded as background textures.
 /// </summary>
 //TODO: Further documentation.
 [Autoload(Side = ModSide.Client)]
@@ -40,6 +42,7 @@ public sealed class BackgroundTextureLoader : Loader
 
 	/// <summary>
 	/// Adds a texture to the list of background textures and assigns it a background texture slot.
+	/// <para/> Use this for any background textures not autoloaded by the <see cref="Mod.BackgroundAutoloadingEnabled"/> logic.
 	/// </summary>
 	/// <param name="mod">The mod that owns this background.</param>
 	/// <param name="texture">The texture.</param>
@@ -64,6 +67,8 @@ public sealed class BackgroundTextureLoader : Loader
 		Array.Resize(ref TextureAssets.Background, TotalCount);
 		Array.Resize(ref Main.backgroundHeight, TotalCount);
 		Array.Resize(ref Main.backgroundWidth, TotalCount);
+		Array.Resize(ref SurfaceBackgroundID.Sets.IsForest, TotalCount);
+		Array.Resize(ref SurfaceBackgroundID.Sets.IsDesertVariant, TotalCount);
 
 		foreach (string texture in backgrounds.Keys) {
 			int slot = backgrounds[texture];
@@ -144,7 +149,7 @@ public class SurfaceBackgroundStylesLoader : SceneEffectLoader<ModSurfaceBackgro
 
 	public SurfaceBackgroundStylesLoader()
 	{
-		Initialize(Main.BG_STYLES_COUNT);
+		Initialize(SurfaceBackgroundID.Count);
 	}
 
 	internal override void ResizeArrays()
@@ -312,7 +317,9 @@ public class SurfaceBackgroundStylesLoader : SceneEffectLoader<ModSurfaceBackgro
 		SkyManager.Instance.DrawToDepth(Main.spriteBatch, 1f / (float)Main.instance.bgParallax);
 
 		Main.instance.bgStartX = (int)(-Math.IEEERemainder(Main.screenPosition.X * Main.instance.bgParallax, Main.bgWidthScaled) - (Main.bgWidthScaled / 2));
+		/* TODO: Main.instance.screenOff no longer exists. Adjust this logic to new logic.
 		Main.instance.bgTopY = (int)((-Main.screenPosition.Y + Main.instance.screenOff / 2f) / (Main.worldSurface * 16.0) * a + b) + (int)Main.instance.scAdj;
+		*/
 
 		if (Main.gameMenu) {
 			Main.instance.bgTopY = 320;

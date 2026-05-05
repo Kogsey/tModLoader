@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Terraria;
 using Terraria.ModLoader;
 using Microsoft.Xna.Framework;
@@ -58,5 +59,9 @@ public class GlobalNPCTest : GlobalNPC
 #if COMPILE_ERROR
 		closeness = 20;
 #endif
+	}
+
+	public override void EditSpawnPool(IDictionary<int, float> pool, NPC.Spawner spawner) {
+		if (spawner.waterTile) { }
 	}
 }

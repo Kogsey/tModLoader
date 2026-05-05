@@ -31,6 +31,7 @@ namespace ExampleMod.Content.Projectiles
 			Projectile.extraUpdates = 1;
 			Projectile.usesLocalNPCImmunity = true;
 			Projectile.localNPCHitCooldown = -1;
+			Projectile.DamageType = DamageClass.SummonMeleeSpeed;
 			Projectile.WhipSettings.Segments = 10;
 			Projectile.WhipSettings.RangeMultiplier = 1.5f;
 		}
@@ -49,7 +50,7 @@ namespace ExampleMod.Content.Projectiles
 			Player owner = Main.player[Projectile.owner];
 			Projectile.rotation = Projectile.velocity.ToRotation() + MathHelper.PiOver2; // Without PiOver2, the rotation would be off by 90 degrees counterclockwise.
 
-			Projectile.Center = Main.GetPlayerArmPosition(Projectile) + Projectile.velocity * Timer;
+			Projectile.Center = Main.GetPlayerArmPosition(Projectile, owner) + Projectile.velocity * Timer;
 			// Vanilla uses Vector2.Dot(Projectile.velocity, Vector2.UnitX) here. Dot Product returns the difference between two vectors, 0 meaning they are perpendicular.
 			// However, the use of UnitX basically turns it into a more complicated way of checking if the projectile's velocity is above or equal to zero on the X axis.
 			Projectile.spriteDirection = Projectile.velocity.X >= 0f ? 1 : -1;
@@ -153,7 +154,7 @@ namespace ExampleMod.Content.Projectiles
 			}
 		}
 
-		public override bool PreDraw(ref Color lightColor) {
+		public override bool PreDraw(Player player, ref Color lightColor) {
 			List<Vector2> list = new List<Vector2>();
 			Projectile.FillWhipControlPoints(Projectile, list);
 
@@ -166,7 +167,6 @@ namespace ExampleMod.Content.Projectiles
 
 			SpriteEffects flip = Projectile.spriteDirection < 0 ? SpriteEffects.None : SpriteEffects.FlipHorizontally;
 
-			Main.instance.LoadProjectile(Type);
 			Texture2D texture = TextureAssets.Projectile[Type].Value;
 
 			Vector2 pos = list[0];

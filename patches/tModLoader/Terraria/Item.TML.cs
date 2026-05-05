@@ -1,7 +1,9 @@
 using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Terraria.DataStructures;
+using Terraria.GameContent.Prefixes;
 using Terraria.ID;
 using Terraria.ModLoader;
 using Terraria.ModLoader.Core;
@@ -15,9 +17,27 @@ public partial class Item : TagSerializable, IEntityWithGlobals<GlobalItem>, IMo
 
 	private int currentUseAnimationCompensation;
 
+	/// <summary>
+	/// The ModItem instance attached to this Item. All modded items will have an appropriate instance of the ModItem-inheriting class assigned to this field. Will be null for vanilla items. Can be used to check if an Item is a modded item or not.
+	/// <para/> If you need to access members of a specific ModItem class from code outside of the ModItem, you can cast to your class:
+	/// <code>
+	/// if (item.ModItem is MyItem myItem)
+	/// {
+	///     myItem.myField = 5;
+	/// }
+	/// </code>
+	/// </summary>
 	public ModItem ModItem { get; internal set; }
 
-#region Globals
+	public Vector2 Size {
+		get => new Vector2(width, height);
+		set {
+			width = (int)value.X;
+			height = (int)value.Y;
+		}
+	}
+
+	#region Globals
 	int IEntityWithGlobals<GlobalItem>.Type => type;
 	internal GlobalItem[] _globals;
 	public RefReadOnlyArray<GlobalItem> EntityGlobals => _globals;
@@ -48,7 +68,7 @@ public partial class Item : TagSerializable, IEntityWithGlobals<GlobalItem>, IMo
 	public List<Mod> StatsModifiedBy { get; private set; } = new();
 
 	/// <summary>
-	/// An additional identifier 
+	/// An additional identifier
 	/// </summary>
 	public int NetStateVersion { get; private set; }
 
@@ -159,17 +179,6 @@ public partial class Item : TagSerializable, IEntityWithGlobals<GlobalItem>, IMo
 		=> DamageClassLoader.effectInheritanceCache[DamageType.Type, damageClass.Type];
 
 	/// <summary>
-	/// returns false if and only if type, stack and prefix match<br/>
-	/// <seealso cref="IsNetStateDifferent(Item)"/>
-	/// </summary>
-	public bool IsNotSameTypePrefixAndStack(Item compareItem) => type != compareItem.type || stack != compareItem.stack || prefix != compareItem.prefix;
-
-	/// <summary>
-	/// Returns true if these items are different and there is a need to re-sync them
-	/// </summary>
-	public bool IsNetStateDifferent(Item compareItem) => type != compareItem.type || stack != compareItem.stack || prefix != compareItem.prefix || NetStateVersion != compareItem.NetStateVersion;
-
-	/// <summary>
 	/// Use this instead of <see cref="Clone"/> for much faster state snapshotting and change sync detection.<br/>
 	/// Note!! <see cref="SetDefaults(int)"/> will NOT be called. The target item will remain as it was (most likely air), except for type, stack, prefix and netStateVersion
 	/// </summary>
@@ -178,6 +187,7 @@ public partial class Item : TagSerializable, IEntityWithGlobals<GlobalItem>, IMo
 		target.type = type;
 		target.stack = stack;
 		target.prefix = prefix;
+		target.favorited = favorited;
 		target.NetStateVersion = NetStateVersion;
 	}
 
@@ -199,64 +209,64 @@ public partial class Item : TagSerializable, IEntityWithGlobals<GlobalItem>, IMo
 	}
 
 	/// <summary>
-	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/>
+	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/>
 	/// <br/><br/>This particular overload uses a Rectangle instead of X, Y, Width, and Height to determine the actual spawn position.
 	/// </summary>
-	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/></returns>
-	public static int NewItem(IEntitySource source, Rectangle rectangle, int Type, int Stack = 1, bool noBroadcast = false, int prefixGiven = 0, bool noGrabDelay = false, bool reverseLookup = false)
-		=> NewItem(source, rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, Type, Stack, noBroadcast, prefixGiven, noGrabDelay, reverseLookup);
+	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/></returns>
+	public static int NewItem(IEntitySource source, Rectangle rectangle, int Type, int Stack = 1, bool noBroadcast = false, int prefixGiven = 0, bool noGrabDelay = false)
+		=> NewItem(source, rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, Type, Stack, noBroadcast, prefixGiven, noGrabDelay);
 
 	/// <summary>
-	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/>
+	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/>
 	/// <br/><br/>This particular overload uses a Vector2 instead of X, Y, Width, and Height to determine the actual spawn position.
 	/// </summary>
-	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/></returns>
-	public static int NewItem(IEntitySource source, Vector2 position, int Type, int Stack = 1, bool noBroadcast = false, int prefixGiven = 0, bool noGrabDelay = false, bool reverseLookup = false)
-		=> NewItem(source, (int)position.X, (int)position.Y, 0, 0, Type, Stack, noBroadcast, prefixGiven, noGrabDelay, reverseLookup);
+	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/></returns>
+	public static int NewItem(IEntitySource source, Vector2 position, int Type, int Stack = 1, bool noBroadcast = false, int prefixGiven = 0, bool noGrabDelay = false)
+		=> NewItem(source, (int)position.X, (int)position.Y, 0, 0, Type, Stack, noBroadcast, prefixGiven, noGrabDelay);
 
 	/// <summary>
-	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/>
+	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/>
 	/// <br/><br/>This particular overload uses an Item instead of just the item type. All modded data will be preserved.
 	/// </summary>
-	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/></returns>
-	public static int NewItem(IEntitySource source, int X, int Y, int Width, int Height, Item item, bool noBroadcast = false, bool noGrabDelay = false, bool reverseLookup = false)
-		=> Item.NewItem_Inner(source, X, Y, Width, Height, item, item.type, item.stack, noBroadcast, item.prefix, noGrabDelay, reverseLookup);
+	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/></returns>
+	public static int NewItem(IEntitySource source, int X, int Y, int Width, int Height, Item item, bool noBroadcast = false, bool noGrabDelay = false)
+		=> Item.NewItem_Inner(source, X, Y, Width, Height, item, item.type, item.stack, noBroadcast, item.prefix, noGrabDelay);
 
 	/// <summary>
-	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/>
+	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/>
 	/// <br/><br/>This particular overload uses an Item instead of just the item type. All modded data will be preserved.
 	/// <br/><br/>This particular overload uses a Vector2 instead of X and Y to determine the actual spawn position.
 	/// </summary>
-	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/></returns>
-	public static int NewItem(IEntitySource source, Vector2 pos, Vector2 randomBox, Item item, bool noBroadcast = false, bool noGrabDelay = false, bool reverseLookup = false)
-		=> NewItem(source, (int)pos.X, (int)pos.Y, (int)randomBox.X, (int)randomBox.Y, item, noBroadcast, noGrabDelay, reverseLookup);
+	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/></returns>
+	public static int NewItem(IEntitySource source, Vector2 pos, Vector2 randomBox, Item item, bool noBroadcast = false, bool noGrabDelay = false)
+		=> NewItem(source, (int)pos.X, (int)pos.Y, (int)randomBox.X, (int)randomBox.Y, item, noBroadcast, noGrabDelay);
 
 	/// <summary>
-	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/>
+	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/>
 	/// <br/><br/>This particular overload uses an Item instead of just the item type. All modded data will be preserved.
 	/// <br/><br/>This particular overload uses a Vector2 instead of X and Y to determine the actual spawn position.
 	/// </summary>
-	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/></returns>
-	public static int NewItem(IEntitySource source, Vector2 pos, int Width, int Height, Item item, bool noBroadcast = false, bool noGrabDelay = false, bool reverseLookup = false)
-		=> NewItem(source, (int)pos.X, (int)pos.Y, Width, Height, item, noBroadcast, noGrabDelay, reverseLookup);
+	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/></returns>
+	public static int NewItem(IEntitySource source, Vector2 pos, int Width, int Height, Item item, bool noBroadcast = false, bool noGrabDelay = false)
+		=> NewItem(source, (int)pos.X, (int)pos.Y, Width, Height, item, noBroadcast, noGrabDelay);
 
 	/// <summary>
-	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/>
+	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/>
 	/// <br/><br/>This particular overload uses an Item instead of just the item type. All modded data will be preserved.
 	/// <br/><br/>This particular overload uses a Vector2 instead of X, Y, Width, and Height to determine the actual spawn position.
 	/// </summary>
-	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/></returns>
-	public static int NewItem(IEntitySource source, Vector2 position, Item item, bool noBroadcast = false, bool noGrabDelay = false, bool reverseLookup = false)
-		=> NewItem(source, (int)position.X, (int)position.Y, 0, 0, item, noBroadcast, noGrabDelay, reverseLookup);
+	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/></returns>
+	public static int NewItem(IEntitySource source, Vector2 position, Item item, bool noBroadcast = false, bool noGrabDelay = false)
+		=> NewItem(source, (int)position.X, (int)position.Y, 0, 0, item, noBroadcast, noGrabDelay);
 
 	/// <summary>
-	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/>
+	/// <inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/>
 	/// <br/><br/>This particular overload uses an Item instead of just the item type. All modded data will be preserved.
 	/// <br/><br/>This particular overload uses a Rectangle instead of X, Y, Width, and Height to determine the actual spawn position.
 	/// </summary>
-	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool, bool)"/></returns>
-	public static int NewItem(IEntitySource source, Rectangle rectangle, Item item, bool noBroadcast = false, bool noGrabDelay = false, bool reverseLookup = false)
-		=> NewItem(source, rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, item, noBroadcast, noGrabDelay, reverseLookup);
+	/// <returns><inheritdoc cref="Item.NewItem(IEntitySource, int, int, int, int, int, int, bool, int, bool)"/></returns>
+	public static int NewItem(IEntitySource source, Rectangle rectangle, Item item, bool noBroadcast = false, bool noGrabDelay = false)
+		=> NewItem(source, rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, item, noBroadcast, noGrabDelay);
 
 	private void ApplyItemAnimationCompensationsToVanillaItems()
 	{
@@ -323,4 +333,34 @@ public partial class Item : TagSerializable, IEntityWithGlobals<GlobalItem>, IMo
 	/// </summary>
 	public void OnShimmer() => ItemLoader.OnShimmer(this);
 	//public IEntitySource GetSource_ForShimmer() => GetSource_Misc(ItemSourceID.ToContextString(ItemSourceID.Shimmer));
+
+	// Added by TML.
+	/// <summary>
+	/// Determines the <see cref="PrefixCategory">prefix categories</see> of this <see cref="Item"/>.
+	/// </summary>
+	/// <returns>A <see cref="List{PrefixCategory}"/> of every category this <see cref="Item"/> matches, the <see cref="List{PrefixCategory}"/> will be empty if this <see cref="Item"/> doesn't have any categories.</returns>
+	public List<PrefixCategory> GetPrefixCategories() {
+		ref List<PrefixCategory> categories = ref PrefixLoader.itemPrefixesByType[type];
+		if (categories is not null) return categories;
+		categories = [];
+		if (PrefixLegacy.ItemSets.SwordsHammersAxesPicks[type] || ItemLoader.MeleePrefix(this))
+			categories.Add(PrefixCategory.Melee);
+
+		if (PrefixLegacy.ItemSets.GunsBows[type] || ItemLoader.RangedPrefix(this))
+			categories.Add(PrefixCategory.Ranged);
+
+		if (PrefixLegacy.ItemSets.Magic[type] || ItemLoader.MagicPrefix(this))
+			categories.Add(PrefixCategory.Magic);
+
+		if (PrefixLegacy.ItemSets.Summon[type] || ItemLoader.SummonPrefix(this))
+			categories.Add(PrefixCategory.Summon);
+
+		if (PrefixLegacy.ItemSets.SpearsMacesChainsawsDrillsPunchCannon[type] || PrefixLegacy.ItemSets.BoomerangsChakrams[type] || PrefixLegacy.ItemSets.ItemsThatCanHaveLegendary2[type] || ItemLoader.WeaponPrefix(this) || categories.Count != 0)
+			categories.Add(PrefixCategory.AnyWeapon);
+
+		if (IsAPrefixableAccessory())
+			categories.Add(PrefixCategory.Accessory);
+
+		return categories;
+	}
 }

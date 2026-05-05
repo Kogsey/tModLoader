@@ -1,34 +1,33 @@
 --- src/TerrariaNetCore/Terraria/MonoLaunch.cs
 +++ src/tModLoader/Terraria/MonoLaunch.cs
-@@ -6,7 +_,10 @@
+@@ -6,7 +_,11 @@
  using System.Reflection;
  using System.Runtime.InteropServices;
  using System.Runtime.Loader;
 +using System.Threading;
  using Terraria;
 +using Terraria.ModLoader;
++using Terraria.ModLoader.Core;
 +using Terraria.ModLoader.Engine;
  
  namespace Terraria;
  
-@@ -16,7 +_,16 @@
+@@ -16,6 +_,14 @@
  
  	private static void Main(string[] args)
  	{
 +		// Launch tModPorter instead if it needed.
 +		if (Array.IndexOf(args, "-tModPorter") is int i && i >= 0) {
-+			tModPorter.Program.Main(args.Skip(i + 1).ToArray()).GetAwaiter().GetResult();
++			tModPorterLaunch.Launch(args.Skip(i).ToArray());
 +			return;
 +		}
 +
 +		Thread.CurrentThread.Name = "Entry Thread";
 +
  #if NETCORE
-+		NativeLibraries.SetNativeLibraryPath(NativesDir);
+ 		NativeLibraries.SetNativeLibraryPath(NativesDir);
  		AssemblyLoadContext.Default.ResolvingUnmanagedDll += ResolveNativeLibrary;
- #else
- 		AppDomain.CurrentDomain.AssemblyResolve += delegate (object sender, ResolveEventArgs sargs) {
-@@ -34,6 +_,35 @@
+@@ -35,6 +_,36 @@
  #endif
  
  		Environment.SetEnvironmentVariable("FNA_WORKAROUND_WINDOW_RESIZABLE", "1");
@@ -40,13 +39,14 @@
 +			foreach (var environmentVar in File.ReadAllLines("env-argsConfig.txt").Select(text => text.Split("=")).Where(envVar => envVar.Length == 2))
 +				Environment.SetEnvironmentVariable(environmentVar[0], environmentVar[1]);
 +
++		// The default main thread stack size on Windows is too small (1.5MB)
++		// 
 +		// Spawn a thread to use configured default stack size instead of the one reported in the binary
-+		// https://social.msdn.microsoft.com/Forums/office/en-US/7132b30d-9792-4bf3-87ec-7198052e4ed3/main-thread-stack-size?forum=csharpgeneral
-+		// post processing the binary with `editbin /stack:400000 tModLoader.dll` should do it for the main thread but it's annoying
-+		// and duplicates the size defined in the runtimeconfig
-+		// @TODO: Temporary change, make it cross platform, linux crashes if FNA loop is not in the REAL Main thread
-+		//        Atm linux and mac use for main also the env variable so it works
-+
++		// https://github.com/dotnet/runtime/blob/release/10.0/src/coreclr/vm/corhost.cpp#L611
++		// post processing the binary with `editbin /stack:400000 tModLoader.dll` would do it for the main thread but msbuild is annoying/slow and it would duplicate the size defined in the runtimeconfig
++		//
++		// Reportedly, Linux crashes if FNA loop is not on the entry thread, but (fortunately?)
++		// Linux and Mac ignore the DEFAULT_STACK_SIZE runtimeconfig property entirely, and just uses whatever is set by `ulimit -s` which happens to be 8MB by default
 +		var LocalLaunchGame = () => Main_End(args);
 +
 +		if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
@@ -64,23 +64,48 @@
  		Program.LaunchGame(args, monoArgs: true);
  	}
  
-@@ -57,17 +_,17 @@
+@@ -58,29 +_,39 @@
  			if (assemblies.TryGetValue(name, out var handle))
  				return handle;
  
 -			Console.WriteLine($"Native Resolve: {assembly.FullName} -> {name}");
 +			Logging.tML.Debug($"Native Resolve: {assembly.FullName} -> {name}");
++			if (name.StartsWith("/tmp/"))
++				return IntPtr.Zero;
++
+ 			if (name.StartsWith("steam_api")) {
+-				Console.WriteLine("\tdelegating to Steamworks.NET.AnyCPU resolver");
++				Logging.tML.Debug("\tdelegating to Steamworks.NET.AnyCPU resolver");
+ 				return assemblies[name] = IntPtr.Zero;
+ 			}
  
- 			var files = Directory.GetFiles(NativesDir, $"*{name}*", SearchOption.AllDirectories);
++			string[] files;
++			try {
+-			var files = Directory.GetFiles(NativesDir, $"*{name}*", SearchOption.AllDirectories);
++				files = Directory.GetFiles(NativesDir, $"*{name}*", SearchOption.AllDirectories);
++			}
++			catch {
++				files = [];
++			}
++
  			if (files.FirstOrDefault() is not string path) {
 -				Console.WriteLine("\tnot found");
 +				Logging.tML.Debug("\tnot found");
  				return IntPtr.Zero;
  			}
  
+ 			// This method shouldn't be throwing exceptions, in case we're in a TryLoad scenario, but we still want exception info
 -			Console.WriteLine($"\tattempting load {path}");
 +			Logging.tML.Debug($"\tattempting load {path}");
- 			handle = NativeLibrary.Load(path);
+ 			try {
+ 				handle = NativeLibrary.Load(path);
+ 			}
+ 			catch (Exception e) {
+-				Console.WriteLine($"\t\tFailed to load {name}.\n{e}");
++				Logging.tML.Debug($"\t\tFailed to load {name}.\n{e}");
+ 				return IntPtr.Zero;
+ 			}
+ 
 -			Console.WriteLine("\tsuccess");
 +			Logging.tML.Debug("\tsuccess");
  			return assemblies[name] = handle;

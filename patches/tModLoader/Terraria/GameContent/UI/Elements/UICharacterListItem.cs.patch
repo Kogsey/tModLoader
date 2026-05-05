@@ -1,6 +1,12 @@
 --- src/TerrariaNetCore/Terraria/GameContent/UI/Elements/UICharacterListItem.cs
 +++ src/tModLoader/Terraria/GameContent/UI/Elements/UICharacterListItem.cs
-@@ -12,8 +_,11 @@
+@@ -7,13 +_,17 @@
+ using Terraria.ID;
+ using Terraria.IO;
+ using Terraria.Localization;
++using Terraria.ModLoader;
+ using Terraria.Social;
+ using Terraria.UI;
  
  namespace Terraria.GameContent.UI.Elements;
  
@@ -13,7 +19,7 @@
  	private PlayerFileData _data;
  	private Asset<Texture2D> _dividerTexture;
  	private Asset<Texture2D> _innerPanelTexture;
-@@ -43,6 +_,9 @@
+@@ -44,6 +_,9 @@
  		_buttonPlayTexture = Main.Assets.Request<Texture2D>("Images/UI/ButtonPlay");
  		_buttonRenameTexture = Main.Assets.Request<Texture2D>("Images/UI/ButtonRename");
  		_buttonDeleteTexture = Main.Assets.Request<Texture2D>("Images/UI/ButtonDelete");
@@ -23,7 +29,7 @@
  		Height.Set(96f, 0f);
  		Width.Set(0f, 1f);
  		SetPadding(6f);
-@@ -103,6 +_,9 @@
+@@ -105,6 +_,9 @@
  		_deleteButton = uIImageButton5;
  		Append(uIImageButton5);
  		num += 4f;
@@ -33,20 +39,7 @@
  		_buttonLabel = new UIText("");
  		_buttonLabel.VAlign = 1f;
  		_buttonLabel.Left.Set(num, 0f);
-@@ -111,7 +_,12 @@
- 		_deleteButtonLabel = new UIText("");
- 		_deleteButtonLabel.VAlign = 1f;
- 		_deleteButtonLabel.HAlign = 1f;
-+
-+		/*
- 		_deleteButtonLabel.Left.Set(-30f, 0f);
-+		*/
-+		_deleteButtonLabel.Left.Set(data.customDataFail == null ? -30f : -54f, 0f);
-+
- 		_deleteButtonLabel.Top.Set(-3f, 0f);
- 		Append(_deleteButtonLabel);
- 		uIImageButton.SetSnapPoint("Play", snapPointIndex);
-@@ -137,6 +_,9 @@
+@@ -139,6 +_,9 @@
  	{
  		if (_data.IsCloudSave)
  			_buttonLabel.SetText(Language.GetTextValue("UI.MoveOffCloud"));
@@ -56,7 +49,7 @@
  		else
  			_buttonLabel.SetText(Language.GetTextValue("UI.MoveToCloud"));
  	}
-@@ -192,8 +_,16 @@
+@@ -193,8 +_,16 @@
  	{
  		if (_data.IsCloudSave)
  			_data.MoveToLocal();
@@ -64,7 +57,7 @@
 +		else {
 +			// Only recalculate when about to put the file to cloud
 +			ModLoader.Engine.Steam.RecalculateAvailableSteamCloudStorage();
-+			
++
 +			// Don't allow both the move to cloud, and the setting of the label
 +			if (!ModLoader.Engine.Steam.CheckSteamCloudStorageSufficient(_fileSize))
 +				return;
@@ -74,7 +67,7 @@
  
  		((UIImageButton)evt.Target).SetImage(_data.IsCloudSave ? _buttonCloudActiveTexture : _buttonCloudInactiveTexture);
  		if (_data.IsCloudSave)
-@@ -301,11 +_,11 @@
+@@ -292,11 +_,11 @@
  		DrawPanel(spriteBatch, vector2, num2);
  		spriteBatch.Draw(TextureAssets.Heart.Value, vector2 + new Vector2(5f, 2f), Color.White);
  		vector2.X += 10f + (float)TextureAssets.Heart.Width();
