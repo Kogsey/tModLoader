@@ -739,7 +739,7 @@
 +
 +		if (Main.projPet[type] && ProjectileLoader.MinionContactDamage(this))
 +			vanillaCanDamage = true;
-+			
++
 +		return ProjectileLoader.CanDamage(this) ?? vanillaCanDamage;
 +	}
 +
@@ -752,7 +752,7 @@
  
  	private void Damage_PVE_Inner(int victimIndex, NPC targetNPC, Rectangle projRectangle, float projectileSpecificDamageMultiplier, int[] immuneArray, ref bool keepIterating)
  	{
-+	
++
 +		bool forceHit = false;
 +		if (CombinedHooks.CanHitNPCWithProj(this, targetNPC) is bool b) {
 +			if (!b)
@@ -777,7 +777,7 @@
 +
 +		if (forceHit)
 +			flag3 = true;
-+		
++
  		if (!(owner < 0 || targetNPC.immune[owner] == 0 || flag3))
  			return;
  
@@ -802,7 +802,7 @@
  		float num2 = knockBack;
  		bool crit = false;
  		float armorPenetrationPercent = 0f;
-+		
++
 +		// TML:
 +		// This is unused, replaced with this.ArmorPenetration.
 +		// Make sure to keep ArmorPenetration values in sync with the switch table below.
@@ -1260,7 +1260,7 @@
  					netUpdate2 = true;
  				}
 +
-+				// #VanillaNetUpdateBug 
++				// #VanillaNetUpdateBug
 +				netUpdate = false;
  			}
  
@@ -1451,13 +1451,13 @@
  	public void Resize(int newWidth, int newHeight)
  	{
  		position = base.Center;
-@@ -17790,6 +_,8 @@
+@@ -17831,6 +_,8 @@
  
  	private void Shimmer()
  	{
 +		ModdedProjectileShimmer();
-+
- 		if (hostile || (aiStyle == 99 && ai[0] == -1f) || (aiStyle == 15 && (ai[0] == 2f || ai[0] == 4f)))
++		
+ 		if ((hostile && aiStyle != 25 && aiStyle != 17) || (aiStyle == 99 && ai[0] == -1f) || (aiStyle == 15 && (ai[0] == 2f || ai[0] == 4f)))
  			return;
  
 @@ -17862,7 +_,7 @@
