@@ -4,11 +4,13 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria.Audio;
 using Terraria.DataStructures;
 using Terraria.GameContent;
+using Terraria.GameContent.Golf;
 using Terraria.GameContent.Items;
 using Terraria.GameContent.Prefixes;
 using Terraria.ID;
@@ -79,6 +81,7 @@ public static class ItemLoader
 
 		//Textures
 		Array.Resize(ref TextureAssets.Item, ItemCount);
+		Main.ItemMapIconRenderer?.Reset(TextureAssets.Item);
 		Array.Resize(ref TextureAssets.ItemFlame, ItemCount);
 
 		//Sets
@@ -86,8 +89,10 @@ public static class ItemLoader
 		LoaderUtils.ResetStaticMembers(typeof(AmmoID));
 		LoaderUtils.ResetStaticMembers(typeof(PrefixLegacy.ItemSets));
 		LoaderUtils.ResetStaticMembers(typeof(ItemVariants));
-		if (unloading)
+		if (unloading) {
 			LoaderUtils.ResetStaticMembers(typeof(ItemUseStyleID));
+			LoaderUtils.ResetStaticMembers(typeof(GameContent.Tile_Entities.TEDisplayDoll));
+		}
 
 		//Etc
 		Array.Resize(ref Item.cachedItemSpawnsByType, ItemCount);
@@ -111,12 +116,10 @@ public static class ItemLoader
 			Main.InitializeItemAnimations();
 		}
 
+		EmergencyStacking.ResetGroupLookup();
+
 		if (unloading)
 			Array.Resize(ref Main.anglerQuestItemNetIDs, vanillaQuestFishCount);
-		else
-			Main.anglerQuestItemNetIDs = Main.anglerQuestItemNetIDs
-				.Concat(items.Where(modItem => modItem.IsQuestFish()).Select(modItem => modItem.Type))
-				.ToArray();
 	}
 
 	internal static void FinishSetup()
@@ -132,6 +135,10 @@ public static class ItemLoader
 		}
 
 		ValidateDropsSet();
+
+		Main.anglerQuestItemNetIDs = Main.anglerQuestItemNetIDs
+				.Concat(items.Where(modItem => ItemID.Sets.IsQuestFish[modItem.Type]).Select(modItem => modItem.Type))
+				.ToArray();
 	}
 
 	private static void UpdateHookLists()
@@ -1119,7 +1126,8 @@ public static class ItemLoader
 	/// </summary>
 	public static bool ConsumeItem(Item item, Player player)
 	{
-		if (item.IsAir) return true;
+		if (item.IsAir)
+			return true;
 		if (item.ModItem != null && !item.ModItem.ConsumeItem(player))
 			return false;
 
@@ -1317,26 +1325,26 @@ public static class ItemLoader
 		}
 	}
 
-	private static HookList HookUpdateArmorSet = AddHook<Action<Player, string>>(g => g.UpdateArmorSet);
+	private static HookList HookUpdateArmorSet = AddHook<Action<Player, ArmorSetBonus>>(g => g.UpdateArmorSet);
 
 	/// <summary>
-	/// If the head's <see cref="ModItem.IsArmorSet(Item, Item, Item)"/> returns true, calls the head's <see cref="ModItem.UpdateArmorSet(Player)"/>. This is then repeated for the body, then the legs. Then for each GlobalItem, if <see cref="GlobalItem.IsArmorSet(Item, Item, Item)"/> returns a non-empty string, calls <see cref="GlobalItem.UpdateArmorSet(Player, string)"/> with that string.
+	/// Calls <see cref="ModItem.UpdateArmorSet(Player, ArmorSetBonus)"/> on the head, body, and legs modded items that belong to the active ArmorSetBonus. Then <see cref="GlobalItem.UpdateArmorSet(Player, ArmorSetBonus)"/> is called on each GlobalItem.
 	/// </summary>
-	public static void UpdateArmorSet(Player player, Item head, Item body, Item legs)
+	public static void UpdateArmorSet(Player player, ArmorSetBonus armorSetBonus, Item head, Item body, Item legs)
 	{
-		if (head.ModItem != null && head.ModItem.IsArmorSet(head, body, legs))
-			head.ModItem.UpdateArmorSet(player);
+		if (armorSetBonus != null) {
+			if (head.ModItem != null && armorSetBonus.Head == head.type)
+				head.ModItem.UpdateArmorSet(player, armorSetBonus);
 
-		if (body.ModItem != null && body.ModItem.IsArmorSet(head, body, legs))
-			body.ModItem.UpdateArmorSet(player);
+			if (body.ModItem != null && armorSetBonus.Body == body.type)
+				body.ModItem.UpdateArmorSet(player, armorSetBonus);
 
-		if (legs.ModItem != null && legs.ModItem.IsArmorSet(head, body, legs))
-			legs.ModItem.UpdateArmorSet(player);
+			if (legs.ModItem != null && armorSetBonus.Legs == legs.type)
+				legs.ModItem.UpdateArmorSet(player, armorSetBonus);
+		}
 
 		foreach (var g in HookUpdateArmorSet.Enumerate()) {
-			string set = g.IsArmorSet(head, body, legs);
-			if (!string.IsNullOrEmpty(set))
-				g.UpdateArmorSet(player, set);
+			g.UpdateArmorSet(player, armorSetBonus);
 		}
 	}
 
@@ -1513,16 +1521,13 @@ public static class ItemLoader
 	private static HookList HookCanStack = AddHook<Func<Item, Item, bool>>(g => g.CanStack);
 
 	/// <summary>
-	/// Returns false if item prefixes don't match. Then calls all GlobalItem.CanStack hooks until one returns false then ModItem.CanStack. Returns whether any of the hooks returned false.
+	/// Calls all GlobalItem.CanStack hooks until one returns false then ModItem.CanStack. Returns whether any of the hooks returned false.
 	/// </summary>
 	/// <param name="destination">The item instance that <paramref name="source"/> will attempt to stack onto</param>
 	/// <param name="source">The item instance being stacked onto <paramref name="destination"/></param>
 	/// <returns>Whether or not the items are allowed to stack</returns>
 	public static bool CanStack(Item destination, Item source)
 	{
-		if (destination.prefix != source.prefix) // #StackablePrefixWeapons
-			return false;
-
 		foreach (var g in HookCanStack.Enumerate(destination)) {
 			if (!g.CanStack(destination, source))
 				return false;
@@ -1819,6 +1824,29 @@ public static class ItemLoader
 		}
 	}
 
+	private delegate bool DelegateWingGlidingSpeeds(Item item, Player player, ref float gravityMultiplier, ref float maxSpeedMultiplier, bool prevented);
+	private static HookList HookWingGlidingSpeeds = AddHook<DelegateWingGlidingSpeeds>(g => g.WingGlidingSpeeds);
+	/// <summary>
+	/// If the player is gliding using wings, this uses the result of GetWing, and calls ModItem.WingGlidingSpeeds then all GlobalItem.WingGlidingSpeeds hooks.
+	/// <para/> Return false to prevent vanilla gliding behavior.
+	/// </summary>
+	public static bool WingGlidingSpeeds(Player player, ref float gravityMultiplier, ref float maxSpeedMultiplier)
+	{
+		Item item = player.equippedWings;
+		if (item == null) {
+			EquipTexture texture = EquipLoader.GetEquipTexture(EquipType.Wings, player.wingsLogic);
+			return texture?.WingGlidingSpeeds(player, ref gravityMultiplier, ref maxSpeedMultiplier) ?? true;
+		}
+
+		bool result = item.ModItem?.WingGlidingSpeeds(player, ref gravityMultiplier, ref maxSpeedMultiplier) ?? true;
+
+		foreach (GlobalItem g in HookWingGlidingSpeeds.Enumerate(item)) {
+			result &= g.WingGlidingSpeeds(item, player, ref gravityMultiplier, ref maxSpeedMultiplier, !result);
+		}
+
+		return result;
+	}
+
 	private delegate void DelegateHorizontalWingSpeeds(Item item, Player player, ref float speed, ref float acceleration);
 	private static HookList HookHorizontalWingSpeeds = AddHook<DelegateHorizontalWingSpeeds>(g => g.HorizontalWingSpeeds);
 
@@ -1861,7 +1889,32 @@ public static class ItemLoader
 		return retVal ?? false;
 	}
 
-	private delegate void DelegateUpdate(WorldItem item, ref float gravity, ref float maxFallSpeed);
+    public static void ModifyEquipTextureDraw(ref PlayerDrawSet drawInfo, ref DrawData drawData, EquipType type, int slot, [CallerMemberName] string methodName = "")
+    {
+        // Notes:
+        // Glowmasks not supported yet, but might in future
+        // Front, called twice, once for each half of texture
+        // Head, can be called twice if Head.Sets.FrontToBackID used
+        // Shield, Can be called many times if parrying, but no api support for that yet
+        // Body, called 5 times for each CompositePlayerDrawContext
+
+        if (slot <= 0)
+        {
+            drawInfo.DrawDataCache.Add(drawData);
+            return;
+        }
+
+        // TODO: We can make a GlobalItem hook if requested, it would just need the equip type and slot passed to it rather than EquipTexture for it to work with vanilla equipment.
+        EquipTexture texture = EquipLoader.GetEquipTexture(type, slot);
+        bool? result = texture?.ModifyDraw(ref drawInfo, ref drawData, methodName);
+
+        if (result ?? true)
+            drawInfo.DrawDataCache.Add(drawData);
+
+        return;
+    }
+
+    private delegate void DelegateUpdate(WorldItem item, ref float gravity, ref float maxFallSpeed);
 	private static HookList HookUpdate = AddHook<DelegateUpdate>(g => g.Update);
 
 	/// <summary>
@@ -2043,6 +2096,36 @@ public static class ItemLoader
 
 		foreach (var g in HookPostDrawInInventory.Enumerate(item)) {
 			g.PostDrawInInventory(item, spriteBatch, position, frame, drawColor, itemColor, origin, scale);
+		}
+	}
+
+	private delegate void DelegatePreModifyItemDraw(Item item, ref PlayerDrawSet drawInfo, ref DrawData drawData, ref DrawData? coloredDrawData, ref DrawData? glowmaskDrawData);
+	private static HookList HookPreModifyItemDraw = AddHook<DelegatePreModifyItemDraw>(g => g.PreModifyItemDraw);
+	private delegate void DelegatePostModifyItemDraw(Item item, ref PlayerDrawSet drawInfo, DrawData drawData, DrawData? coloredDrawData, DrawData? glowmaskDrawData);
+	private static HookList HookPostModifyItemDraw = AddHook<DelegatePostModifyItemDraw>(g => g.PostModifyItemDraw);
+
+	/// <summary>
+	/// Calls GlobalItem.PreModifyItemDraw, then ModItem.ModifyItemDraw, then GlobalItem.PostModifyItemDraw.
+	/// </summary>
+	public static void ModifyItemDraw(Item item, ref PlayerDrawSet drawInfo, DrawData drawData, DrawData? coloredDrawData, DrawData? glowmaskDrawData)
+	{
+		// Draw behind and modify normal drawData
+		foreach (var g in HookPreModifyItemDraw.Enumerate(item)) {
+			g.PreModifyItemDraw(item, ref drawInfo, ref drawData, ref coloredDrawData, ref glowmaskDrawData);
+		}
+
+		// Draw before, modify normal drawData, draw after
+		if (item.ModItem?.ModifyItemDraw(ref drawInfo, ref drawData, ref coloredDrawData, ref glowmaskDrawData) ?? true) {
+			drawInfo.DrawDataCache.Add(drawData);
+			if (coloredDrawData.HasValue)
+				drawInfo.DrawDataCache.Add(coloredDrawData.Value);
+			if (glowmaskDrawData.HasValue)
+				drawInfo.DrawDataCache.Add(glowmaskDrawData.Value);
+		}
+
+		// Draw in front
+		foreach (var g in HookPostModifyItemDraw.Enumerate(item)) {
+			g.PostModifyItemDraw(item, ref drawInfo, drawData, coloredDrawData, glowmaskDrawData);
 		}
 	}
 
@@ -2262,7 +2345,7 @@ public static class ItemLoader
 
 	private static HookList HookModifyTooltips = AddHook<Action<Item, List<TooltipLine>>>(g => g.ModifyTooltips);
 
-	public static List<TooltipLine> ModifyTooltips(Item item, ref int numTooltips, string[] names, ref string[] text, ref Color[] lineColors, ref int oneDropLogo, out Color?[] overrideColor, int prefixlineIndex)
+	public static List<TooltipLine> ModifyTooltips(Item item, ref int numTooltips, string[] names, ref string[] text, ref Color[] lineColors, ref int oneDropLogo, int prefixlineIndex)
 	{
 		var tooltips = new List<TooltipLine>();
 
@@ -2272,6 +2355,8 @@ public static class ItemLoader
 			if (k == oneDropLogo) {
 				tooltip.OneDropLogo = true;
 			}
+
+			tooltip.Color = lineColors[k];
 
 			tooltips.Add(tooltip);
 		}
@@ -2298,8 +2383,8 @@ public static class ItemLoader
 
 		numTooltips = tooltips.Count;
 		text = new string[numTooltips];
+		lineColors = new Color[numTooltips];
 		oneDropLogo = -1;
-		overrideColor = new Color?[numTooltips];
 
 		for (int k = 0; k < numTooltips; k++) {
 			text[k] = tooltips[k].Text;
@@ -2308,7 +2393,7 @@ public static class ItemLoader
 				oneDropLogo = k;
 			}
 
-			overrideColor[k] = tooltips[k].OverrideColor;
+			lineColors[k] = tooltips[k].Color;
 		}
 
 		return tooltips;
@@ -2346,6 +2431,30 @@ public static class ItemLoader
 		return false;
 	}
 
+	public static bool GetGolfClubProperties(int type, out GolfHelper.ClubProperties properties)
+	{
+		if (GetItem(type)?.GetGolfClubProperties() is GolfHelper.ClubProperties result) {
+			properties = result;
+			return true;
+		}
+
+		properties = default;
+		return false;
+	}
+
+	private static HookList HookModifyArmorSets = AddHook<Action>(g => g.ModifyArmorSets);
+
+	public static void ModifyArmorSets()
+	{
+		foreach (ModItem item in items) {
+			item.ModifyArmorSets();
+		}
+
+		foreach (GlobalItem g in HookModifyArmorSets.Enumerate()) {
+			g.ModifyArmorSets();
+		}
+	}
+	
 	private static HookList HookCanShimmer = AddHook<Func<WorldItem, bool>>(g => g.CanShimmer);
 
 	public static bool CanShimmer(WorldItem item)

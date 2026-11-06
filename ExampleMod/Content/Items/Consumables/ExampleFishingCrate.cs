@@ -14,13 +14,14 @@ namespace ExampleMod.Content.Items.Consumables
 			// Disclaimer for both of these sets (as per their docs): They are only checked for vanilla item IDs, but for cross-mod purposes it would be helpful to set them for modded crates too
 			ItemID.Sets.IsFishingCrate[Type] = true;
 			//ItemID.Sets.IsFishingCrateHardmode[Type] = true; // This is a crate that mimics a pre-hardmode biome crate, so this is commented out
+			ItemID.Sets.OpenableBag[Type] = true;
 
 			Item.ResearchUnlockCount = 10;
 		}
 
 		public override void SetDefaults() {
 			Item.DefaultToPlaceableTile(ModContent.TileType<Tiles.ExampleFishingCrate>());
-			Item.width = 12; // The hitbox dimensions are intentionally smaller so that it looks nicer when fished up on a bobber
+			Item.width = 12;
 			Item.height = 12;
 			Item.rare = ItemRarityID.Orange;
 			Item.value = Item.sellPrice(0, 2);

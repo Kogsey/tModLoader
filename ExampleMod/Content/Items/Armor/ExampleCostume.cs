@@ -33,9 +33,9 @@ namespace ExampleMod.Content.Items.Armor
 			EquipLoader.AddEquipTexture(Mod, $"{Texture}_{EquipType.Legs}", EquipType.Legs, this);
 
 			// Add a separate set of equip textures by providing a custom name reference instead of an item reference
-			EquipLoader.AddEquipTexture(Mod, $"{Texture}Alt_{EquipType.Head}", EquipType.Head, name: "BlockyAlt", equipTexture: new BlockyHead());
-			EquipLoader.AddEquipTexture(Mod, $"{Texture}Alt_{EquipType.Body}", EquipType.Body, name: "BlockyAlt");
-			EquipLoader.AddEquipTexture(Mod, $"{Texture}Alt_{EquipType.Legs}", EquipType.Legs, name: "BlockyAlt");
+			EquipLoader.AddEquipTexture(Mod, $"{Texture}Alt_{EquipType.Head}", EquipType.Head, this, name: "BlockyAlt", equipTexture: new BlockyHead());
+			EquipLoader.AddEquipTexture(Mod, $"{Texture}Alt_{EquipType.Body}", EquipType.Body, this, name: "BlockyAlt");
+			EquipLoader.AddEquipTexture(Mod, $"{Texture}Alt_{EquipType.Legs}", EquipType.Legs, this, name: "BlockyAlt");
 		}
 
 		// Called in SetStaticDefaults
@@ -52,8 +52,8 @@ namespace ExampleMod.Content.Items.Armor
 			int equipSlotBodyAlt = EquipLoader.GetEquipSlot(Mod, "BlockyAlt", EquipType.Body);
 			int equipSlotLegsAlt = EquipLoader.GetEquipSlot(Mod, "BlockyAlt", EquipType.Legs);
 
-			ArmorIDs.Head.Sets.DrawHead[equipSlotHead] = false;
-			ArmorIDs.Head.Sets.DrawHead[equipSlotHeadAlt] = false;
+			ArmorIDs.Head.Sets.HidesHead[equipSlotHead] = true;
+			ArmorIDs.Head.Sets.HidesHead[equipSlotHeadAlt] = true;
 			ArmorIDs.Body.Sets.HidesTopSkin[equipSlotBody] = true;
 			ArmorIDs.Body.Sets.HidesArms[equipSlotBody] = true;
 			ArmorIDs.Body.Sets.HidesTopSkin[equipSlotBodyAlt] = true;

@@ -311,37 +311,22 @@ namespace ExampleMod.Content.NPCs
 		}
 
 		public override string GetChat() {
-			WeightedRandom<string> chat = new WeightedRandom<string>();
+			LocalizedText chosenChat = Language.SelectRandom(Lang.CreateDialogFilter("Mods.ExampleMod.Dialogue.ExampleTravelingMerchant"));
 
-			int partyGirl = NPC.FindFirstNPC(NPCID.PartyGirl);
-			if (partyGirl >= 0) {
-				chat.Add(Language.GetTextValue("Mods.ExampleMod.Dialogue.ExampleTravelingMerchant.PartyGirlDialogue", Main.npc[partyGirl].GivenName));
-			}
-
-			chat.Add(Language.GetTextValue("Mods.ExampleMod.Dialogue.ExampleTravelingMerchant.StandardDialogue1"));
-			chat.Add(Language.GetTextValue("Mods.ExampleMod.Dialogue.ExampleTravelingMerchant.StandardDialogue2"));
-			chat.Add(Language.GetTextValue("Mods.ExampleMod.Dialogue.ExampleTravelingMerchant.StandardDialogue3"));
-
-			string hivePackDialogue = Language.GetTextValue("Mods.ExampleMod.Dialogue.ExampleTravelingMerchant.HiveBackpackDialogue");
-			chat.Add(hivePackDialogue);
-
-			string dialogueLine = chat; // chat is implicitly cast to a string.
-			if (hivePackDialogue.Equals(dialogueLine)) {
+			if (chosenChat.Key == "Mods.ExampleMod.Dialogue.ExampleTravelingMerchant.HiveBackpackDialogue") {
 				// Main.npcChatCornerItem shows a single item in the corner, like the Angler Quest chat.
 				Main.npcChatCornerItem = ItemID.HiveBackpack;
 			}
 
-			return dialogueLine;
+			return chosenChat.Value;
 		}
 
-		public override void SetChatButtons(ref string button, ref string button2) {
-			button = Language.GetTextValue("LegacyInterface.28"); // This is the key to the word "Shop"
-		}
-
-		public override void OnChatButtonClicked(bool firstButton, ref string shop) {
-			if (firstButton) {
-				shop = Shop.Name; // Opens the shop
-			}
+		public override void RegisterChatButtons(NPCInteractionList interactions) {
+			// Here is one way to assign a Shop button to our NPC.
+			// In this example, we are assigning the button to be at the beginning of the list.
+			// The shop name we pass in NPCInteractions.Shop() needs to be the same name as what we use to register the NPCShop.
+			interactions.Prepend(NPCInteractions.Shop(Shop.Name));
+			// In this case, this is the same thing as: interactions.InsertBefore(NPCInteractions.Shop(Shop.Name), NPCInteractionDatabase.CloseButton);
 		}
 
 		public override void AI() {

@@ -1,4 +1,5 @@
 using Terraria;
+using Terraria.GameContent;
 using Terraria.ID;
 using Terraria.ObjectData;
 using Microsoft.Xna.Framework;
@@ -53,6 +54,7 @@ public class SimpleRenamedVanillaMembersTest
 		bool isJourney = Main.GameModeInfo.IsJourneyMode;
 		_ = Main.recBigList;
 		_ = Main.recFastScroll;
+		_ = Main.hasFocus;
 
 		PopupText popupText = Main.popupText[0];
 
@@ -60,6 +62,8 @@ public class SimpleRenamedVanillaMembersTest
 		int logicCheckScreenWidth = Main.LogicCheckScreenWidth;
 
 		Main.musicBox2 = 87;
+
+		Main.instance.DrawWindowsIMEPanel(new Vector2(98f, (float)(Main.screenHeight - 36)), 0f);
 
 		int copperTierOreInt = WorldGen.CopperTierOre;
 		ushort copperTierOre = WorldGen.CopperTierOre;
@@ -120,6 +124,8 @@ public class SimpleRenamedVanillaMembersTest
 		player.IsAValidEquipmentSlotForIteration(0);
 		player.VanillaUpdateEquip(null);
 		player.CanBuyItem(100000);
+		player.oldAdjTile[0] = false;
+		int nonTorch = player.nonTorch;
 
 		Main.DrawPlayer(player, Vector2.Zero, 0f, Vector2.Zero, 1f);
 
@@ -153,5 +159,18 @@ public class SimpleRenamedVanillaMembersTest
 		_ = Item.BannerToNPC(Banner);
 
 		Utils.PlotTileArea(10, 20, DelegateMethods.SpreadLightOpen_StopForSolids);
+
+		Projectile projectile = Main.projectile[0];
+		Vector2 armPosition = Main.GetPlayerArmPosition(projectile, player);
+		_ = projectile.identity;
+		_ = projectile.projUUID;
+		_ = Projectile.GetByUUID(projectile.owner, projectile.whoAmI);
+
+		var tradeOption = new ItemTrader.TradeOption();
+		_ = tradeOption.GivingITemType;
+
+		_ = ContentSamples.CreativeHelper.ItemGroup.PlacableObjects;
+
+		Item ammo = player.ChooseAmmo(player.HeldItem);
 	}
 }

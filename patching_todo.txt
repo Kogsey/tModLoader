@@ -809,3 +809,19 @@ if (nPC.aiStyle == 7)
  			ai[1] = 0f;
 @@ -73627,9 +_,12 @@
  				num = 5;
+
+
+
+
+//// MessageID.cs
+
+ 	public const byte SyncItemsWithShimmer = 145;
+
++	/// <summary>
++	/// <listheader> Contains 3 settings for number </listheader>
++	/// <list type="bullet">
++	/// <item/>0: Calls <see cref="Item.ShimmerEffect(Microsoft.Xna.Framework.Vector2)"/> where the vector is number2, number3 (Sound and dusts)
++	/// <item/>1: Calls <see cref="Player.AddCoinLuck(Microsoft.Xna.Framework.Vector2, int) "/> on the receiver's local player where the vector is number2, number3 and the integer is number4
++	/// <item/>2: Calls <see cref="NPC.SetNetShimmerEffect"/> where number is <see cref="Entity.whoAmI"/> for the npc
++	/// </list>
++	/// </summary>

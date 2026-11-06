@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
 using System;
+using Terraria.Audio;
 using Terraria.DataStructures;
 using Terraria.GameContent;
 using Terraria.GameContent.ObjectInteractions;
@@ -27,22 +28,20 @@ namespace Terraria.ModLoader;
 /// <br></br>
 /// 2) Assuming Step 1 has passed, game queries if the DESTINATION PYLON (the pylon the player CLICKED on the map) has enough NPCs nearby (NPCCount step)
 /// <br></br>
-/// 3) Assuming Step 2 has passed, game queries if there is ANY DANGER at ALL across the entire map, ignoring the lunar pillar event (AnyDanger step)
+/// 3) Assuming Step 2 has passed, game queries if the DESTINATION PYLON is in the Lihzahrd Temple before Plantera is defeated.
 /// <br></br>
-/// 4) Assuming Step 3 has passed, game queries if the DESTINATION PYLON is in the Lihzahrd Temple before Plantera is defeated.
+/// 4) Assuming Step 3 has passed, game queries if the DESTINATION PYLON meets its biome specifications for whatever type of pylon it is (BiomeRequirements step)
 /// <br></br>
-/// 5) Assuming Step 4 has passed, game queries if the DESTINATION PYLON meets its biome specifications for whatever type of pylon it is (BiomeRequirements step)
+/// 5) Regardless of all the past checks, if the DESTINATION PYLON is a modded one, <seealso cref="ValidTeleportCheck_DestinationPostCheck"/> is called on it.
 /// <br></br>
-/// 6) Regardless of all the past checks, if the DESTINATION PYLON is a modded one, <seealso cref="ValidTeleportCheck_DestinationPostCheck"/> is called on it.
+/// 6) The game queries all pylons on the map and checks if any of them are in interaction distance with the player (<seealso cref="Player.InInteractionRange"/>), and if so, checks Step 2 on it. If Step 2 passes, Step 4 is then called on it as well (NPCCount &amp; BiomeRequirements step).
+/// If Step 4 also passes, the loop breaks and no further pylons are checked, and for the next steps, the pylon that succeeded will be the designated NEARBY PYLON.
 /// <br></br>
-/// 7) The game queries all pylons on the map and checks if any of them are in interaction distance with the player (<seealso cref="Player.InInteractionRange"/>), and if so, checks Step 2 on it. If Step 2 passes, Step 5 is then called on it as well (NPCCount &amp; BiomeRequirements step).
-/// If Step 5 also passes, the loop breaks and no further pylons are checked, and for the next steps, the pylon that succeeded will be the designated NEARBY PYLON.
+/// 7) Regardless of all the past checks, if the designated NEARBY PYLON is a modded one, <seealso cref="ValidTeleportCheck_NearbyPostCheck"/> is called on it.
 /// <br></br>
-/// 8) Regardless of all the past checks, if the designated NEARBY PYLON is a modded one, <seealso cref="ValidTeleportCheck_NearbyPostCheck"/> is called on it.
+/// 8) Any <seealso cref="GlobalPylon"/> instances run <seealso cref="GlobalPylon.PostValidTeleportCheck"/>.
 /// <br></br>
-/// 9) Any <seealso cref="GlobalPylon"/> instances run <seealso cref="GlobalPylon.PostValidTeleportCheck"/>.
-/// <br></br>
-/// 10) Finally, if all previous checks pass AND the DESTINATION pylon is a modded one, <seealso cref="ModifyTeleportationPosition"/> is called on it, right before the player is teleported.
+/// 9) Finally, if all previous checks pass AND the DESTINATION pylon is a modded one, <seealso cref="ModifyTeleportationPosition"/> is called on it, right before the player is teleported.
 /// </remarks>
 public abstract class ModPylon : ModTile
 {
@@ -117,28 +116,7 @@ public abstract class ModPylon : ModTile
 	}
 
 	/// <summary>
-	/// Step 2 of the ValidTeleportCheck process. This is the second vanilla check that is called when
-	/// checking the destination pylon. This check should be where you check
-	/// if there is any "Danger" nearby, such as bosses or if there is an event happening.
-	/// It is unlikely you will need to use this.
-	/// By default, returns true if there are not any events happening (Lunar Pillars do not count)
-	/// and there are no bosses currently alive.
-	/// </summary>
-	/// <remarks>
-	/// Note that it's important you put the right checks in the right ValidTeleportCheck step,
-	/// as whatever one returns false (if any) will determine the error message sent to the player.
-	/// <br></br>
-	/// <b> If you're confused about the order of which the ValidTeleportCheck methods are called, check out the XML summary
-	/// on the ModPylon class.</b>
-	/// </remarks>
-	/// <param name="pylonInfo"> The internal information pertaining to the current pylon being teleported TO. </param>
-	public virtual bool ValidTeleportCheck_AnyDanger(TeleportPylonInfo pylonInfo)
-	{
-		return !NPC.AnyDanger(false, true);
-	}
-
-	/// <summary>
-	/// Step 3 of the ValidTeleportCheck process. This is the fourth vanilla check that is called when
+	/// Step 2 of the ValidTeleportCheck process. This is the third vanilla check that is called when
 	/// checking both the destination pylon and any possible nearby pylons. This check should be where you check biome related
 	/// things, such as the simple check of whether or not the Pylon is in the proper biome.
 	/// By default, returns true.
@@ -158,7 +136,7 @@ public abstract class ModPylon : ModTile
 	}
 
 	/// <summary>
-	/// The 4th check of the ValidTeleportCheck process. This check is for modded Pylons only, called after
+	/// The 3rd check of the ValidTeleportCheck process. This check is for modded Pylons only, called after
 	/// ALL other checks have completed pertaining the pylon clicked on the map (the destination pylon), but before
 	/// any nearby pylon information is calculated. This is where you an do custom checks that don't pertain to the past destination checks,
 	/// as well as customize the localization key to give custom messages to the player on teleportation failure. By default, does nothing.
@@ -172,7 +150,7 @@ public abstract class ModPylon : ModTile
 	public virtual void ValidTeleportCheck_DestinationPostCheck(TeleportPylonInfo destinationPylonInfo, ref bool destinationPylonValid, ref string errorKey) { }
 
 	/// <summary>
-	/// The 5th and final check of the ValidTeleportCheck process. This check is for modded Pylons only, called after
+	/// The 4th and final check of the ValidTeleportCheck process. This check is for modded Pylons only, called after
 	/// ALL other checks have completed for the destination pylon and all normal checks have taken place for the nearby
 	/// pylon, if applicable. This is where you can do custom checks that don't pertain to the past nearby pylon checks,
 	/// as well as customize the localization key to give custom messages to the player on teleportation failure. By default, does nothing.
@@ -396,6 +374,10 @@ public abstract class ModPylon : ModTile
 		spriteBatch.Draw(crystalHighlightTexture.Value, drawingPosition - Main.screenPosition, smartCursorGlowFrame, selectionGlowColor, 0f, origin, 1f, SpriteEffects.None, 0f);
 	}
 
+	[Obsolete("Use the overload with out bool onScreen, and pass onScreen to DefaultMapClickHandle", error: true)]
+	public bool DefaultDrawMapIcon(ref MapOverlayDrawContext context, Asset<Texture2D> mapIcon, Vector2 drawCenter, Color drawColor, float deselectedScale, float selectedScale)
+		=> DefaultDrawMapIcon(ref context, mapIcon, drawCenter, drawColor, deselectedScale, selectedScale, out _);
+
 	/// <summary>
 	/// Draws the passed in map icon texture for pylons the exact way that vanilla would draw it. Note that this method
 	/// assumes that the texture is NOT framed, i.e there is only a single sprite that is not animated.
@@ -407,46 +389,75 @@ public abstract class ModPylon : ModTile
 	/// <param name="drawColor"> The color to draw the icon as. </param>
 	/// <param name="deselectedScale"> The scale to draw the map icon when it is not selected (not being hovered over). </param>
 	/// <param name="selectedScale"> The scale to draw the map icon when it IS selected (being hovered over). </param>
-	public bool DefaultDrawMapIcon(ref MapOverlayDrawContext context, Asset<Texture2D> mapIcon, Vector2 drawCenter, Color drawColor, float deselectedScale, float selectedScale)
+	/// <param name="onScreen"><see langword="true"/> if the icon was on-screen, <see langword="false"/> if it was clamped to the edge. Pass this to <see cref="DefaultMapClickHandle(bool, bool, TeleportPylonInfo, string, ref string)"/>.
+	/// </param>
+	public bool DefaultDrawMapIcon(ref MapOverlayDrawContext context, Asset<Texture2D> mapIcon, Vector2 drawCenter, Color drawColor, float deselectedScale, float selectedScale, out bool onScreen)
 	{
+		if (Main.mapFullscreen) {
+			return context.DrawClamped(
+				mapIcon.Value,
+				TextureAssets.Extra[299].Value,
+				drawCenter,
+				drawColor,
+				new SpriteFrame(1, 1, 0, 0),
+				deselectedScale,
+				selectedScale,
+				deselectedScale * 0.5f,
+				Alignment.Center,
+				TeleportPylonsMapLayer.BorderSize,
+				out onScreen
+			).IsMouseOver;
+		}
+
+		onScreen = true;
 		return context.Draw(
-						  mapIcon.Value,
-						  drawCenter,
-						  drawColor,
-						  new SpriteFrame(1, 1, 0, 0),
-						  deselectedScale,
-						  selectedScale,
-						  Alignment.Center
-						  )
-					  .IsMouseOver;
+			mapIcon.Value,
+			drawCenter,
+			drawColor,
+			new SpriteFrame(1, 1, 0, 0),
+			deselectedScale,
+			selectedScale,
+			Alignment.Center
+		).IsMouseOver;
 	}
+
+	[Obsolete("Use the overload with bool onScreen, passing onScreen from DefaultDrawMapIcon", error: true)]
+	public void DefaultMapClickHandle(bool mouseIsHovering, TeleportPylonInfo pylonInfo, string hoveringTextKey, ref string mouseOverText)
+		=> DefaultMapClickHandle(mouseIsHovering, true, pylonInfo, hoveringTextKey, ref mouseOverText);
 
 	/// <summary>
 	/// Handles mouse clicking on the map icon the exact way that vanilla handles it. In normal circumstances, this should be called
 	/// directly after DefaultDrawMapIcon.
 	/// </summary>
 	/// <param name="mouseIsHovering"> Whether or not the map icon is currently being hovered over. </param>
+	/// <param name="onScreen">Whether or not the map icon was drawn on-screen. Clicking an on-screen icon teleports to the pylon, while clicking an off-screen icon pans the map towards it.</param>
 	/// <param name="pylonInfo"> The information pertaining to the current pylon being drawn. </param>
 	/// <param name="hoveringTextKey">
 	/// The localization key that will be used to display text on the mouse, granted the mouse is currently hovering over the map icon.
 	/// </param>
 	/// <param name="mouseOverText"> The reference to the string value that actually changes the mouse text value. </param>
-	public void DefaultMapClickHandle(bool mouseIsHovering, TeleportPylonInfo pylonInfo, string hoveringTextKey, ref string mouseOverText)
+	public void DefaultMapClickHandle(bool mouseIsHovering, bool onScreen, TeleportPylonInfo pylonInfo, string hoveringTextKey, ref string mouseOverText)
 	{
-		// We only want these things to happen if the mouse is hovering, thus the check:
-		if (!mouseIsHovering) {
+		if (!mouseIsHovering)
 			return;
-		}
 
 		Main.cancelWormHole = true;
 		mouseOverText = Language.GetTextValue(hoveringTextKey);
 
-		// If clicking, then teleport!
 		if (Main.mouseLeft && Main.mouseLeftRelease) {
 			Main.mouseLeftRelease = false;
-			Main.mapFullscreen = false;
 			PlayerInput.LockGamepadButtons("MouseLeft");
-			Main.PylonSystem.RequestTeleportation(pylonInfo, Main.LocalPlayer);
+
+			if (onScreen) {
+				Main.mapFullscreen = false;
+				Main.PylonSystem.RequestTeleportation(pylonInfo, Main.LocalPlayer);
+				SoundEngine.PlaySound(11);
+			}
+			else {
+				Main.PanTargetMapFullscreen = true;
+				Main.PanTargetMapFullscreenEnd.X = pylonInfo.PositionInTiles.X;
+				Main.PanTargetMapFullscreenEnd.Y = pylonInfo.PositionInTiles.Y;
+			}
 		}
 	}
 }

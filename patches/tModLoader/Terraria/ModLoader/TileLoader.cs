@@ -81,9 +81,12 @@ public static class TileLoader
 	private delegate bool DelegatePreDrawPlacementPreview(int i, int j, int type, SpriteBatch spriteBatch, ref Rectangle frame, ref Vector2 position, ref Color color, bool validPlacement, ref SpriteEffects spriteEffects);
 	private static DelegatePreDrawPlacementPreview[] HookPreDrawPlacementPreview;
 	private static Action<int, int, int, SpriteBatch, Rectangle, Vector2, Color, bool, SpriteEffects>[] HookPostDrawPlacementPreview;
-	private static Action<int, int, int>[] HookRandomUpdate;
+	private static Action<int, int, int, bool>[] HookRandomUpdate;
 	private delegate bool DelegateTileFrame(int i, int j, int type, ref bool resetFrame, ref bool noBreak);
 	private static DelegateTileFrame[] HookTileFrame;
+	private static Action<int, int, int, int, int, int, int, int, int, int, int>[] HookPostTileFrame;
+	private delegate void DelegateModifyFrameMerge(int i, int j, int type, ref int up, ref int down, ref int left, ref int right, ref int upLeft, ref int upRight, ref int downLeft, ref int downRight);
+	private static DelegateModifyFrameMerge[] HookModifyFrameMerge;
 	private static Func<int, int, int, bool>[] HookCanPlace;
 	private static Func<int, int, int, int, bool>[] HookCanReplace;
 	private static Action<int, int, int, int, int>[] HookReplaceTile;
@@ -105,6 +108,8 @@ public static class TileLoader
 	private static Action<int, int, TreeTypes>[] HookPreShakeTree;
 	private static Func<int, int, TreeTypes, bool>[] HookShakeTree;
 	private static Action<int, int, int, int, int>[] HookOnTileConverted;
+	private static Func<int, int, int, bool?>[] HookCanDoWireStuffHere;
+	private static Func<int, int, int, bool?>[] HookCanShowWireStuffHere;
 
 	internal static int ReserveTileID()
 	{
@@ -148,8 +153,6 @@ public static class TileLoader
 		LoaderUtils.ResetStaticMembers(typeof(TileID));
 
 		//Etc
-		Array.Resize(ref Main.SceneMetrics._tileCounts, nextTile);
-		Array.Resize(ref Main.PylonSystem._sceneMetrics._tileCounts, nextTile);
 		Array.Resize(ref Main.tileLighted, nextTile);
 		Array.Resize(ref Main.tileMergeDirt, nextTile);
 		Array.Resize(ref Main.tileCut, nextTile);
@@ -247,6 +250,8 @@ public static class TileLoader
 		ModLoader.BuildGlobalHook(ref HookPostDrawPlacementPreview, globalTiles, g => g.PostDrawPlacementPreview);
 		ModLoader.BuildGlobalHook(ref HookRandomUpdate, globalTiles, g => g.RandomUpdate);
 		ModLoader.BuildGlobalHook<GlobalTile, DelegateTileFrame>(ref HookTileFrame, globalTiles, g => g.TileFrame);
+		ModLoader.BuildGlobalHook(ref HookPostTileFrame, globalTiles, g => g.PostTileFrame);
+		ModLoader.BuildGlobalHook<GlobalTile, DelegateModifyFrameMerge>(ref HookModifyFrameMerge, globalTiles, g => g.ModifyFrameMerge);
 		ModLoader.BuildGlobalHook(ref HookCanPlace, globalTiles, g => g.CanPlace);
 		ModLoader.BuildGlobalHook(ref HookCanReplace, globalTiles, g => g.CanReplace);
 		ModLoader.BuildGlobalHook(ref HookReplaceTile, globalTiles, g => g.ReplaceTile);
@@ -267,6 +272,8 @@ public static class TileLoader
 		ModLoader.BuildGlobalHook(ref HookPreShakeTree, globalTiles, g => g.PreShakeTree);
 		ModLoader.BuildGlobalHook(ref HookShakeTree, globalTiles, g => g.ShakeTree);
 		ModLoader.BuildGlobalHook(ref HookOnTileConverted, globalTiles, g => g.OnTileConverted);
+		ModLoader.BuildGlobalHook(ref HookCanDoWireStuffHere, globalTiles, g => g.CanDoWireStuffHere);
+		ModLoader.BuildGlobalHook(ref HookCanShowWireStuffHere, globalTiles, g => g.CanShowWireStuffHere);
 
 		if (!unloading) {
 			loaded = true;
@@ -336,6 +343,10 @@ public static class TileLoader
 		}
 		*/
 		tileData = TileObjectData.GetTileData(Main.tile[i, j]);
+		// The tile can already be inactive here, since CheckModTile runs while the object is being destroyed.
+		if (tileData == null)
+			return;
+
 		int partFrameX = frameX % tileData.CoordinateFullWidth;
 		int partFrameY = frameY % tileData.CoordinateFullHeight;
 		int partX = partFrameX / (tileData.CoordinateWidth + tileData.CoordinatePadding);
@@ -612,7 +623,7 @@ public static class TileLoader
 			foreach (var item in itemDrops) {
 				item.Prefix(-1); // Assign a random prefix, as expected
 				int num = Item.NewItem(WorldGen.GetItemSource_FromTileBreak(x, y), x * 16, y * 16, 16, 16, item, noBroadcast: false);
-				Main.item[num].TryCombiningIntoNearbyItems(num);
+				Main.item[num].TryCombiningIntoNearbyItems();
 			}
 		}
 	}
@@ -1077,16 +1088,28 @@ public static class TileLoader
 		}
 	}
 
-	public static void RandomUpdate(int i, int j, int type)
+	public static void RandomUpdate(int i, int j, int type, bool underground)
 	{
 		if (!Main.tile[i, j].active()) {
 			return;
 		}
-		GetTile(type)?.RandomUpdate(i, j);
+		GetTile(type)?.RandomUpdate(i, j, underground);
 
 		foreach (var hook in HookRandomUpdate) {
-			hook(i, j, type);
+			hook(i, j, type, underground);
 		}
+	}
+
+	/// <summary>
+	/// Invokes <see cref="ModTile.GrowSapling"/> for the modded tile at the given coordinates.
+	/// Called by <see cref="WorldGen.AttemptToGrowTreeFromSapling"/> when fertilizer is used on a modded sapling tile.
+	/// </summary>
+	public static bool GrowModSapling(int i, int j, int type, bool underground, int treeHeightAddon, bool ignoreWalls)
+	{
+		if (!Main.tile[i, j].active())
+			return false;
+
+		return GetTile(type)?.GrowSapling(i, j, underground, treeHeightAddon, ignoreWalls) ?? false;
 	}
 
 	public static bool TileFrame(int i, int j, int type, ref bool resetFrame, ref bool noBreak)
@@ -1111,6 +1134,10 @@ public static class TileLoader
 		if (modTile != null) {
 			modTile.PostTileFrame(i, j, up, down, left, right, upLeft, upRight, downLeft, downRight);
 		}
+
+		foreach (var hook in HookPostTileFrame) {
+			hook(i, j, type, up, down, left, right, upLeft, upRight, downLeft, downRight);
+		}
 	}
 
 	public static void ModifyFrameMerge(int type, int i, int j, ref int up, ref int down, ref int left, ref int right, ref int upLeft, ref int upRight, ref int downLeft, ref int downRight)
@@ -1118,6 +1145,10 @@ public static class TileLoader
 		ModTile modTile = GetTile(type);
 		if (modTile != null) {
 			modTile.ModifyFrameMerge(i, j, ref up, ref down, ref left, ref right, ref upLeft, ref upRight, ref downLeft, ref downRight);
+		}
+
+		foreach (var hook in HookModifyFrameMerge) {
+			hook(i, j, type, ref up, ref down, ref left, ref right, ref upLeft, ref upRight, ref downLeft, ref downRight);
 		}
 	}
 
@@ -1474,6 +1505,13 @@ public static class TileLoader
 				jungle = TileID.Sets.RemixJungleBiome[i];
 			}
 
+			if (Main.infectedSeed) {
+				if (corrupt == -10)
+					corrupt *= 3;
+				if (crimson == -10)
+					crimson *= 3;
+			}
+
 			metrics.EvilTileCount += tileCount * corrupt;
 			metrics.BloodTileCount += tileCount * crimson;
 			metrics.JungleTileCount += tileCount * jungle;
@@ -1514,5 +1552,41 @@ public static class TileLoader
 
 		GetTile(fromType)?.OnTileConverted(i, j, fromType, toType, conversionType);
 		GetTile(toType)?.OnTileConverted(i, j, fromType, toType, conversionType);
+	}
+
+	public static bool? CanDoWireStuffHere(int i, int j, int type)
+	{
+		bool? ret = GetTile(type)?.CanDoWireStuffHere(i, j);
+		if (ret == false)
+			return false;
+
+		foreach (var hook in HookCanDoWireStuffHere) {
+			bool? canDoWire = hook(i, j, type);
+			if (canDoWire.HasValue) {
+				if (!canDoWire.Value)
+					return false;
+
+				ret = true;
+			}
+		}
+		return ret;
+	}
+
+	public static bool? CanShowWireStuffHere(int i, int j, int type)
+	{
+		bool? ret = GetTile(type)?.CanShowWireStuffHere(i, j);
+		if (ret == false)
+			return false;
+
+		foreach (var hook in HookCanShowWireStuffHere) {
+			bool? canShowWire = hook(i, j, type);
+			if (canShowWire.HasValue) {
+				if (!canShowWire.Value)
+					return false;
+
+				ret = true;
+			}
+		}
+		return ret;
 	}
 }

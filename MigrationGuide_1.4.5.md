@@ -10,7 +10,7 @@ Modders should follow this guide to migrate their mod from 1.4.4 to 1.4.5. This 
 
 This tModLoader release updates .NET from .NET 8 to .NET 10. Modders will need to download and install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download). Visual Studio users will need to [update to Visual Studio 2026](https://learn.microsoft.com/en-us/visualstudio/install/update-visual-studio?view=visualstudio) as well. Visual Studio 2022 will not work anymore. Rider and Visual Studio Code users should make sure they are updated as well.
 
-The porting process will change your source code. If you are not yet using and [source code version control](https://github.com/tModLoader/tModLoader/wiki/Intermediate-Git-&-mod-management) like a GitHub repository, now might be the time to learn how to do that. If you are not ready to learn that yet, please at least make a backup of your source code.
+The porting process will change your source code. If you are not yet using [source code version control](https://github.com/tModLoader/tModLoader/wiki/Intermediate-Git-&-mod-management) like a GitHub repository, now might be the time to learn how to do that. If you are not ready to learn that yet, please at least make a backup of your source code.
 
 ## Porting Instructions
 
@@ -38,6 +38,42 @@ The `Item` class has had the in-world functionality split into a new `WorldItem`
 
 Hooks that deal with items in the game world will now have a `WorldItem item` parameter as well. This will require modders to switch from `Item` to `item` in various `ModItem` classes if dealing with the fields that are now on `WorldItem`.
 
+`Item.width` and `Item.height` no longer have any relation to the in-world hitbox of dropped items. All items now have a 16x16 hitbox in the game world. You may need to adjust custom glowmask drawing (`ModItem.PostDrawInWorld`) to account for this change if it is now incorrectly drawn by changing `Item.width/height` to `WorldItem.width/height`.
+
+#### Working with Main.item[]
+
+Use `WorldItem.ReplaceWith` to change the `Item` instance a `WorldItem` contains while preserving its world state (position, etc).
+
+```cs
+WorldItem worldItem = Main.item[index];
+if (worldItem.active) {
+    worldItem.ReplaceWith(replacementItem);
+    worldItem.SyncItem();
+}
+```
+
+Replacing a `Main.item` entry directly is possible, but requires setting `WorldItem.whoAmI` as well.
+
+### Item.NewItem
+
+`Item.NewItem` has been reworked.
+- 🤖 Instead of passing a `rectangle`, `position, size` or `X, Y, W, H` only for the item to spawn at the center. Just pass `center` directly
+- 🤖 `noGrabDelay` has been replaced by `NewItemOwnership`, we recommend reading the docs on it and considering the right value to pass to each of your call sites
+- 🤖 `reverseLookup` is gone, no replacement
+- New `velocity` and `modifier` parameters make it easy to modify the item before syncing. 
+  - These should replace the need for `noBroadcast: true`
+  - Some uses of `Mod/GlobalItem.OnSpawn` may be better served by passing a `modifier` delegate, if they only apply to some call sites.
+
+🤖 Due to the signature changes, many 1.4.4 calls will no longer compile, but tModPorter can handle the vast majority of them.
+
+`Item.RequestNewItem` has been added to make spawning world items from multiplayer clients easier. It is also safe to call in single player, but we generally recommend considering `QuickSpawnItem` first.
+
+There should be almost no reason to send `MessageID.SyncItem` packets manually, or use `noBroadcast: true` anymore
+
+### Shared Equipment Loadouts
+
+Armor, accessories and dyes can now be shared to other loadouts via favoriting, but the `Item` instances are not copied into `Player.[armor|dye]`. Use `Player.GetEffective[Armor|Dye](slot)` to find the equipment which is actually 'active'
+
 ### Projectile Draw Changes
 
 There have been several changes to projectile drawing in this update.
@@ -57,6 +93,157 @@ Finally, `ProjectileID.Sets.HeldProjDoesNotUsePlayerGfxOffY` has been removed. `
   * Held in hand: Remove `Projectile.hide = true;`. Set `Projectile.usesOwnerLight = true;` and `Projectile.drawLayer = ProjectileDrawLayerID.HeldProj;` (or `ProjectileDrawLayerID.HeldProjOverHand` if `ModProjectile.DrawHeldProjInFrontOfHeldItemAndArms` was used before) in `ModProjectile.SetDefaults`.
   * Not held in hand (flail): Set `Projectile.drawLayer = ProjectileDrawLayerID.HeldProj;`
 * Projectile that shouldn't be drawn at all: No adjustments necessary.
+
+### Town NPC Chat Buttons
+
+Chat buttons for Town NPCs have changed significantly in 1.4.5. The new system uses an `NPCInteraction` to define what the button says, when it should be shown, and what happens when it is clicked. Town NPCs can now support up to 32 buttons visible at one time (no longer limited to firstButton and secondButton).
+
+#### Registering Chat Buttons
+
+Chat buttons are now registered at mod load time instead of when interacting with the NPC. Registration implicitly assigns the button to the NPC.
+
+* `ModNPC.SetChatButtons` has been replaced with `ModNPC.RegisterChatButtons(NPCInteractionList interactions)`
+* The Close, Happiness, and Housing buttons are automatically registered before RegisterChatButtons runs.
+  * If the NPC is a Town Pet, the Pet button will be added, too.
+  * The Close, Happiness, Housing, and Pet buttons are already predefined and can be used with `NPCInteractionDatabase.CloseButton`, etc.
+* Register buttons with the supplied `interactions` parameter.
+  * `interactions.Append(NPCInteraction interaction)` or `interactions.Prepend(NPCInteraction interaction)`
+    * Append will add the button to the end of the list (after the Happiness and Housing buttons, too).
+	* Prepend will add the button to the beginning of the list.
+  * `interactions.InsertAfter(NPCInteraction interactionToRegister, NPCInteraction interactionAfter)` or `interactions.InsertBefore(NPCInteraction interactionToRegister, NPCInteraction interactionBefore)`
+    * InsertAfter and InsertBefore will add the button after or before another specified button.
+  * Each method returns the supplied `NPCInteraction` as an `NPCInteractionList.Entry` if caching the result is desired for use in another method.
+* Use `interactions.X(NPCInteractions.Shop(string shopName = "Shop", string customTextKey = null))` to assign shops.
+  * The shopName must match the shopName for the `NPCShop`.
+  * Example: ModNPC calling `interactions.Append(NPCInteractions.Shop())` will register a button for the shop with full name "ModName/ModNPCName/Shop".
+  * Vanilla shops can easily be added with the full name string "Terraria/Merchant/Shop". ("Decor" for the Painter's second shop).
+  * Shops from other modded Town NPCs can be added with the full name string "ModName/ModNPCName/ShopName". For example: "ExampleMod/ExamplePerson/Shop".
+  * Alternatively, use `NPCShopDatabase.GetShopName(NPCID, "Shop")` to get the full shop name for an NPC.
+* Use `interactions.X(new NPCInteraction...)` to register other buttons.
+  * Example: `interactions.Append(new NPCInteractions.Actions.CloseChat());`
+
+Previously, `ModNPC.OnChatButtonClicked` was used to assign a shop to a button. This is no longer needed because shops are assigned directly to the button in `RegisterChatButtons`. Most modders can probably remove this hook.
+
+Full example:
+```cs
+public override void RegisterChatButtons(NPCInteractionList interactions) {
+	// Here is how to register chat buttons to your NPC.
+	// There are many method that you can use to change the order of the buttons.
+	// interactions.Append(NPCInteraction interaction)	This will add the button to the end of the list (after the Happiness and Housing buttons, too).
+	// interactions.Prepend(NPCInteraction interaction)	This will add the button to the beginning of the list.
+	// interactions.InsertAfter(NPCInteraction interactionToRegister, NPCInteraction interactionAfter)		This will add the button after another specified button.
+	// interactions.InsertBefore(NPCInteraction interactionToRegister, NPCInteraction interactionBefore)	This will add the button before another specified button.
+	
+	// In this example we are registering our Shop button to before the Close button.
+	// The Close button instance is provided for us for convenience.
+	interactions.InsertBefore(NPCInteractions.Shop(ShopName), NPCInteractionDatabase.CloseButton); // NPCInteractions.Shop() is a helper that creates a Shop button.
+	
+	// Next, add the rest of our buttons before the Happiness button (which is before the Housing button).
+	interactions.InsertBefore(new AwesomeifyButton(), NPCInteractionDatabase.HappinessButton); // These are custom buttons.
+	interactions.InsertBefore(new UpgradeButton(), NPCInteractionDatabase.HappinessButton);
+	interactions.InsertBefore(new OpenShopOnlyAvailableDuringDay(ShopName, "Day Only Shop"), NPCInteractionDatabase.HappinessButton);
+
+	// Showcase of other things you can do
+	NPCInteractionList.Entry awesomeifyButton = interactions.InsertBefore(new AwesomeifyButton(), NPCInteractionDatabase.HappinessButton); // Return the interaction instance
+	interactions.InsertAfter(new OpenShopOnlyAvailableDuringDay(ShopName, "Day Only Shop"), awesomeifyButton); // Insert after the instance we saved above.
+	interactions.Prepend(NPCInteractions.Shop(ShopName)); // Insert at the beginning
+	interactions.Append(NPCInteractions.Shop(ShopName)); // Insert at the end (after the happiness and housing buttons, too)
+	
+	// Don't want a close, happiness, or housing button? Just disable it!
+	interactions.Disable(NPCInteractionDatabase.HousingButton);
+
+	// Adding existing shops from other NPCs
+	interactions.Append(NPCInteractions.Shop("Terraria/Painter/Shop", "Painter Shop"));
+	interactions.Append(NPCInteractions.Shop("Terraria/Painter/Decor", "Painter Decor"));
+	interactions.Append(NPCInteractions.Shop("ExampleMod/ExamplePerson/Shop", "Example Person"));
+}
+```
+
+`GlobalNPC.RegisterChatButtons` is a new hook that allows you to add chat buttons to other Town NPCs, including vanilla Town NPCs.
+
+```cs
+// In GlobalNPC
+public override void RegisterChatButtons(NPC npc, NPCInteractionList interactions) {
+	// Here we can add additional chat buttons to Town NPCs.
+	if (npc.type == NPCID.Guide) {
+		// Add a shop button that open the Zoologist's shop.
+		// Vanilla shops can specified with "Terraria/NPCName/Shop" ("Decor" for the Painter's second shop)
+		// Modded shops can be specified with "ModName/NPCName/ShopName"
+		interactions.InsertBefore(NPCInteractions.Shop("Terraria/BestiaryGirl/Shop", "Shop"), NPCInteractionDatabase.CloseButton);
+
+		// Here we are going to disable the Guide's tips button.
+		// This way matches the type of the interaction and returns the first that matches or null if not found.
+		// If the interaction wasn't found, nothing happens.
+		NPCInteraction guideTipNPCInteraction = interactions.Interactions.OfType<NPCInteractions.Actions.GuideTip>().FirstOrDefault();
+		interactions.Disable(guideTipNPCInteraction); // If the instance is null (aka not found), Disable won't do anything.
+
+		// Alternate way: this way does the same thing, but searches the Entries instead and returns the NPCInteractionList.Entry if found.
+		// NPCInteractionList.Entry guideTipEntry = interactions.Entries.Where(e => e.NPCInteraction.GetType() == typeof(NPCInteractions.Actions.GuideTip)).FirstOrDefault();
+		// interactions.Disable(guideTipEntry); // If the instance is null (aka not found), Disable won't do anything.
+	}
+}
+```
+
+#### Creating a Custom NPCInteraction
+
+Custom chat buttons can easily be made by creating a new class that inherits `NPCInteraction`.
+* The `GetText()`, `Condition()`, and `Interact()` must be defined.
+  * `GetText()` is the text of the button.
+  * `Condition()` determines when this NPCInteraction can/will be shown.
+	* If you want the button to always be shown, return true.
+    * Since the buttons are assigned to NPCs, there is no need to set the Condition to be only for specific NPC (no need for `TalkNPCType == ...`)
+  * `Interact()` is the action that happens when the button is clicked such as opening a shop.
+* `ShowExcalmation` can be set to true to display a for a small exclamation point to be shown next to the button.
+* `TryAddCoins(ref Color chatColor, out int coinValue)` can be used to display a coin count next to the button.
+* `TextColor(ref Color chatColor, ref Color chatColorShadow, bool hoveringOverButton)` can be used to modify the color of the button.
+* The properties `LocalPlayer`, `TalkNPC`, and `TalkNPCType` can be used as shortcuts for `Main.LocalPlayer`, `Main.npc[Main.LocalPlayer.talkNPC]`, and `Main.npc[Main.LocalPlayer.talkNPC].type` respectively.
+
+Full Example:
+```cs
+// Here is simple example of a custom button that is labeled "Awesomeify".
+public class AwesomeifyButton : NPCInteraction {
+	// This is the label of the button. This points to a localization key that translates to "Awesomeify".
+	public override string GetText() => Language.GetTextValue("Mods.ExampleMod.NPCs.ExamplePerson.AwesomeifyButton");
+
+	// Here you can change when this button will show up.
+	// We want the button to always be shown, so we return true.
+	// Chat buttons are assigned per NPC, so we don't have to worry about specifying this button should only show for our NPC.
+	// (No need to do something like this: TalkNPCType == ModContent.NPCType<ExamplePerson>();)
+	public override bool Condition() => true;
+
+	// When the button is clicked, this will run.
+	public override void Interact() {
+		Main.npcChatText = "Awesome!";
+	}
+}
+
+// A custom interaction that inherits OpenShop with the condition changed to only show during the day.
+public class OpenShopOnlyAvailableDuringDay(string shopName, string customTextKey = null) : NPCInteractions.Actions.OpenShop(shopName, customTextKey)
+{
+	// base.Condition() will run the base class' condition, so we don't have to copy that ourselves.
+	// Then we also add && Main.dayTime to make this button only show up during the day time.
+	public override bool Condition() => base.Condition() && Main.dayTime;
+
+	public override bool ShowExcalmation => true; // Show an exclamation point next to the button.
+
+	public override void TextColor(ref Color chatColor, ref Color chatColorShadow, bool hoveringOverButton) { // Edit the color of the button.
+		chatColor = Color.Black * (Main.mouseTextColor / 255f); // * (Main.mouseTextColor / 255f) makes it pulse like the normal buttons.
+		chatColorShadow = Color.LightGray;
+		if (hoveringOverButton)
+		{
+			chatColor = Color.DarkGray * (Main.mouseTextColor / 255f);
+			chatColorShadow = Color.White;
+		}
+	}
+}
+```
+
+### Recipe Changes
+
+* Crafting stations are now interactable as well as smart interactable. When right clicked, the crafting window shows recipes that use the crafting station. As they are now interactable, they should have a highlight texture as well.
+  * 💀: Add `TileID.Sets.HasOutlines[Type] = true;` to each crafting station `ModTile`. 
+  * 💀: Also add a `TileName_Highlight.png` texture as well.
+  * 💀: Make sure each tile also has a map entry (`AddMapEntry`) assigned. This is what is shown on the crafting window header.
 
 ## New Vanilla Features
 
@@ -162,20 +349,276 @@ SilverBarRecipeGroup = RecipeGroup.Register(
 );
 ```
 
+### Declarative Armor Set Bonuses
+
+Armor sets are now declarative, meaning that they are stored as data rather than hard-coded logic. This change helps facilitate showing the "Set Bonus (NumEquipped/NumTotal)" tooltip line and other features. The new armor set system, found in the `ArmorSetBonuses` and `ArmorSetBonus` classes, allows armor sets to be created and registered. Each armor set is an `ArmorSetBonus` object that contains the head, body, and legs armor items, code for the armor set effects, a description, and optionally an indication of a primary equipment slot. The system supports optional equipment slots and multiple options for each equipment slot.
+
+Mods will need to update their code to use the new system, `ModItem.IsArmorSet` has been removed in favor of ensuring that all armor sets are properly declared as armor sets to take advantage of the features of the new system.
+
+#### Examples
+Here are some examples of declaring armor sets:
+```cs
+// These examples show code found in SetStaticDefaults of a helmet item (ExampleHelmet):
+int body = ModContent.ItemType<ExampleBreastplate>();
+int legs = ModContent.ItemType<ExampleLeggings>();
+
+// Basic armor set. Consists of a full set of items. No substitutions. 
+AddArmorSet(Type, body, legs);
+
+// Basic armor set alternate approach. Generics can be used if all items are ModItems.
+AddArmorSet<ExampleHelmet, ExampleBreastplate, ExampleLeggings>(); 
+
+// Basic armor set with no legs. This is how the Wizard Hat set is implemented.
+AddArmorSet(Type, body, ItemID.None);
+
+// Armor set with multiple options and the same behavior. In this case, both ExampleHelmet and ExampleHood will satisfy this armor set. This is how the Necro armor set is implemented
+// For armor sets with multiple options, the CreateArmorSet method is followed by any number of Set methods to define the options, then Add must be called at the end.
+int alternateHelmet = ModContent.ItemType<ExampleHood>();
+CreateArmorSet().Set(Type, body, legs).Set(alternateHelmet, body, legs).Add();
+
+// Same as above but using generics.
+CreateArmorSet().Set<ExampleHelmet, ExampleBreastplate, ExampleLeggings>().Set<ExampleHood, ExampleBreastplate, ExampleLeggings>().Add();
+
+// Armor set with multiple options and the same behavior. In this case either complete set will satisfy and apply the armor set. Note that the items aren't interchangeable and can't be mixed and matched. This is how the Wood armor sets are implemented.
+int alternateBody = ModContent.ItemType<ExampleBreastplate_Alt>();
+int alternateLegs = ModContent.ItemType<ExampleLeggings_Alt>();
+CreateArmorSet().Set(Type, body, legs).Set(alternateHelmet, alternateBody, alternateLegs).Add();
+
+// Armor set with multiple options and the same behavior. In this case every equipment is interchangeable. For example ExampleLeggings_Alt can be used with ExampleHelmet and ExampleBreastplate. This is how the Shadow/Ancient Shadow armor sets are implemented.
+CreateArmorSet().Set([Type, alternateHelmet], [body, alternateBody], [legs, alternateLegs]).Add();
+
+// Armor sets sharing armor items except and having a primary item that changes the tooltip. 
+// The PartType parameter lets the game know that the head and legs items are part of multiple armor sets with different set bonus tooltips, so "Changes with (head/torso/leg) piece" is shown instead of the the set bonus tooltip. This is how the Beetle armor set is implemented.
+// Customizing localization and the identifier is explained in the next section.
+AddArmorSet(Type, body, legs, this.GetLocalization("SetBonus_Melee"), "ExampleMod/ExampleArmor_Melee", PrimaryPart: ArmorSetBonus.PartType.Body);
+AddArmorSet(Type, alternateBody, legs, this.GetLocalization("SetBonus_Ranged"), "ExampleMod/ExampleArmor_Ranged", PrimaryPart: ArmorSetBonus.PartType.Body);
+```
+
+The examples above all used `ModItem` helper methods that automate registering a localization key, assigning the armor set effect to `ModItem.UpdateArmorSet`, and assigning a default identifier string. These can all be customized by providing values for the optional parameters of the methods. The set bonus text can be customized by passing in a `LocalizedText`. The code that executes can be customized as well by passing in a delegate. The identifier can also be passed in, which is useful if you need to differentiate between multiple set bonuses that use some of the same items. The `ArmorSetBonuses.Add` and `ArmorSetBonuses.Create` methods could be used instead of the `ModItem.AddArmorSet` and `ModItem.CreateArmorSet` helper methods as well, such as if used in `GlobalItem`.
+
+```cs
+// Customize the set bonus tooltip. We can pass in any LocalizedText using any localization key rather than the automatically derived "Mods.{ModName}.Items.{ItemName}.SetBonus" key.
+// In this example, we are using the automatic key but populating it with a value. This helps keep the set bonus effect in line with the tooltip as a mod is updated.
+LocalizedText SetBonusText = this.GetLocalization("SetBonus").WithFormatArgs(AdditiveGenericDamageBonus);
+AddArmorSet(Type, body, legs, SetBonusText);
+
+// The SetBonus_Melee and SetBonus_Ranged examples above show using a custom key and a custom identifier.
+
+// And of course, we can use a specific localization key not derived from the item's localization prefix, either by using Language.GetText or Mod.GetLocalization, which can be useful for organization.
+AddArmorSet(Type, body, legs, Mod.GetLocalization("CommonSetBonuses.Example"));
+
+// Finally, we can customize the code that runs for each armor set. By default, the UpdateArmorSet method is called. We could check the data on the ArmorSetBonus passed into the method to implement custom code for alternate armor sets, but another option is to pass in a ArmorSetBonus.ArmorSetEffect delegate directly. Here is a full example of that:
+
+public static readonly int AdditiveMeleeDamageBonus = 15;
+public static readonly int AdditiveRangedDamageBonus = 25;
+
+public override void SetStaticDefaults() {
+	int body = ModContent.ItemType<ExampleBreastplate>();
+	int alternateBody = ModContent.ItemType<ExampleBreastplate_Alt>();
+	int legs = ModContent.ItemType<ExampleLeggings>();
+
+	var SetBonusTextMelee = this.GetLocalization("SetBonus_Melee").WithFormatArgs(AdditiveMeleeDamageBonus);
+	ArmorSetBonuses.Add(Type, body, legs, "ExampleMod/ExampleArmor_Melee", SetBonusTextMelee, UpdateArmorSetMelee, ArmorSetBonus.PartType.Body);
+	var SetBonusTextRanged = this.GetLocalization("SetBonus_Ranged").WithFormatArgs(AdditiveRangedDamageBonus);
+	ArmorSetBonuses.Add(Type, alternateBody, legs, "ExampleMod/ExampleArmor_Ranged", SetBonusTextRanged, UpdateArmorSetRanged, ArmorSetBonus.PartType.Body);
+}
+
+private void UpdateArmorSetMelee(Player player) {
+	player.GetDamage(DamageClass.Melee) += AdditiveMeleeDamageBonus / 100f;
+}
+private void UpdateArmorSetRanged(Player player) {
+	player.GetDamage(DamageClass.Ranged) += AdditiveRangedDamageBonus / 100f;
+}
+```
+
+#### Modifying Existing Armor Sets
+
+Previously, mods used `IsArmorSet` and `UpdateArmorSet` to apply additional changes to vanilla armor sets. Now that `IsArmorSet` is gone, mods will instead check the `ArmorSetBonus.Identifier` directly in `UpdateArmorSet`: `if (armorSetBonus?.Identifier == "MagicHat") { ... }`.
+
+`(Mod|Global)Item.ModifyArmorSets` has been added, this is the intended location of modifying `ArmorSetBonus` data (Contained in `ArmorSetBonuses.All`). For example, `armorSetBonus.Effect += MagicHatAdditionalEffects` could be used as an alternative to `GlobalItem.UpdateArmorSet`. This is also where `ArmorSetBonus.Description` should be modified. Previously, modders would adjust `Player.setBonus` directly, but that has been removed. We recommend adjusting `ArmorSetBonus.Description` in the manner shown in ArmorSetTweaks.cs for compatibility. This approach should allow multiple mods to modify the armor set description without conflicting.
+
+ArmorSetTweaks.cs shows off modifying existing armor sets and ExampleRobe.cs shows off adding additional variants (different armor items) to existing armor sets.
+
+#### Porting Notes
+* 🤖: `ModItem.UpdateArmorSet` and `GlobalItem.UpdateArmorSet` now have an `ArmorSetBonus armorSetBonus` parameter.
+* ⚙️: `ModItem.IsArmorSet` and `GlobalItem.IsArmorSet` removed. Use `AddArmorSet` as described above to replace this.
+* Using vanilla armor from existing armor sets in modded sets is now potentially confusing to the user due to how the set bonus tooltip is calculated and displayed. The game will show the armor set tooltip for an item in the inventory (not just the equipment slots), so if a modded armor set also uses that item, it might potentially show the modded armor set bonus tooltip rather than the original vanilla armor set bonus tooltip the player might be looking for. 
+* 💀: `Player.setBonus` has been removed. The set bonus tooltip is taken directly from the active `ArmorSetBonus`. This value will be populated as described previously.
+  * See "Modifying Existing Armor Sets" above for how to modify vanilla set bonus description text.
+
+### Whips and Tag Effects
+
+#### Tag Effects
+
+The way whip tag damage and effects are applied have been redone. Most functionally is no longer applied with a debuff and is instead applied with a `WhipTagEffect`. The tag effect is unique, which means effects from multiple tags cannot be stacked.
+* In the whip item's SetStaticDefaults, add `ItemID.Sets.UniqueTagEffects[Type] = new WhipTagEffect() { ... };`
+  * In the constructor, you can add the basic effects.
+    * `TagDamage`, `CritChance`, `PlayerBuffId`, `PlayerBuffTime`, `PlayerBuffAppliedManually`, and `TagDuration` can be set.
+* Additional functionality can be achieved by creating a new class that inherits `WhipTagEffect` and using that class in the SetStaticDefaults.
+  * There are overrides for when the tagged NPC takes damage from from a minion, sentry, or one of their projectiles.
+    * Hooks include `ModifyTaggedHit`, `ModifyProcHit`, `OnTaggedHit`, and `OnProcHit` as well as others.
+	* For the Proc hooks to run, the tagged NPC must have procs enabled for itself with `TryEnableProcOnNPC`. See ExampleWhipProjectileAdvanced.OnHitNPC for how to apply that.
+  * See Example Whip Advanced for some examples.
+* Most buffs that were made to implement tag damage can be removed.
+  * Any additional effects can be moved to a custom `WhipTagEffect` class.
+  * Don't forget to remove the `AddBuff` in your whip projectile's `OnHitNPC`.
+
+#### Whip Changes
+
+Whip AI has changed slightly. `Projectile.ai[1]` is now used to set the swing direction.
+
+* This means you'll need to override the item's `Shoot` and spawn the projectile manually now.
+* The following code is exactly what you'll need and is what vanilla does.
+
+```cs
+public override bool Shoot(Player player, EntitySource_ItemUse_WithAmmo source, Vector2 position, Vector2 velocity, int type, int damage, float knockback) {
+	// This gives some visual variance on how fast the whip swinging animation plays out.
+	// This has no effect on the actual collision.
+	float swingDirection = 0.6f + (0.4f * Main.rand.NextFloat());
+	// 1/3 of the time, swing the whip from the bottom to top instead of from top to bottom.
+	// The Dark Harvest is the only whip that doesn't have the chance of swinging from the bottom up.
+	if (Main.rand.NextBool(3)) {
+		swingDirection *= -2.5f;
+	}
+	// Set swingDirection to 1f for the pre-1.4.5 behavior.
+
+	Projectile.NewProjectile(source, position, velocity, type, damage, knockback, player.whoAmI, 0f, swingDirection);
+	return false; // Return false because we've already spawned the projectile.
+}
+```
+
+If you were using `Projectile.FillWhipControlPoints` to draw the projectile, you should now pass the player parameter as the third argument. Otherwise the whip won't draw correctly for mannequins.
+
+Example Mod's whips have been updated with new examples and additional comments. See the *Example Mod* section below for the details.
+
+See ExampleWhip, ExampleWhipAdvanced, ExampleWhipProjectile, and ExampleWhipProjectileAdvanced for more examples.
+
+### Localization
+
+#### Global Substitutions
+
+Global substitutions are text substitutions that automatically and dynamically update the text value of the `LocalizedText` they are used in. For example, `"{PartyGirl} is always so loud"` could be used as a TownNPC chat message and it will always display the first name of the Party Girl in the world in place of `{PartyGirl}`. In 1.4.5, support for modded global substitutions is added.
+
+* Use `Lang.RegisterGlobalSubstitution` or `Lang.RegisterModdedGlobalSubstitution` to register a global substitution.
+* Include global substitutions in localization entries. The format is `{GlobalSubstitutionKeyHere}`.
+* `ModNPC` and `ModKeybind` will automatically have suitable global substitutions registered by tModLoader.
+
+Global substitutions are also usable as conditions. Using substitutions as conditions allows filtering out text options that are not relevant to the current state of the world. For example, in the `"{PartyGirl} is always so loud"` example, the corresponding `LocalizedText` will automatically detect that there is no Party Girl in the world and `LocalizedText.ConditionsMet` will be `false`. Helper methods like `Lang.CreateDialogFilter` will automatically filter out all text that doesn't satisfy their conditions, making chat dialogue code much simpler. Substitutions with a `?` at the start (`{?GlobalSubstitutionKeyHere}`) can be used to filter out text options that satisfy the conditions without affecting the text itself. This is usually used for substitutions that return a `bool`, like `{?Day}`. `{?!Day}` checks that it is night time.
+
+We highly recommend that mods utilize global substitutions to greatly streamline TownNPC chat message logic. There is more information about this feature on the [correesponding pull request](https://github.com/tModLoader/tModLoader/pull/5275) and the [localization wiki page](https://github.com/tModLoader/tModLoader/wiki/Localization).
+
+#### Text Variation
+
+The text variation system allows for a single text key to have several variant options. The game uses this in many non-English languages to support prefixes adjusting their spelling to the gender of the item. This feature is not limited to gendered item prefixes, variant text can be used to support alternate localizations or even metadata. The `LanguageVariantSystem.cs` file demonstrates some potential ideas for novel uses of this feature.
+
+### New language support
+Japanese ("ja-JP"), Korean ("ko-KR"), and Traditional Chinese ("zh-Hant") have been added as newly supported languages. 
+* Supporting these new languages in mods is the same process as the existing languages.
+* If you have custom fonts, you may need to build your font files again and include the new characters in your font creation.
+  * TODO: We will have new tooling for this made available sometime.
+
 ## Other Changes
 
+* 💀: Calls to `Collision.SwitchTiles` and (Mod|Global)Tile.SwitchTiles` involving a `Player` now use `objType == 5` instead of `1`. Update checks for `1` in `(Mod|Global)Tile.SwitchTiles` to check for `5` instead.
 * Fishing power bonus now applies to any chair, not just toilets.
+* `EntitySource_FishedOut` is now used for fished up items instead of just NPC spawns that result from fishing.
 * `ICameraModifier` now has a `IsAScreenShake` property to support the user's screen shake accessibility setting (`Main.UseScreenShake`). Update your `ICameraModifier` and other camera movements to support `Main.UseScreenShake`.
 * `Main.sign` length changed from 1000 to 32000.
 * Shaders no longer need to declare every possible input, missing inputs will be ignored now.
 * Dungeon generation has changed. Multiple dungeons can now generate under some secret seeds. Most dungeon related fields that used to be static fields in `Terraria.WorldBuilding.GenVars` are now instance fields in `Terraria.GameContent.Generation.Dungeon.DungeonGenVars`, accessed through the `GenVars.CurrentDungeonGenVars` property to access the data for the currently generating dungeon index.
   * For example: `GenVars.dungeonSide` -> `GenVars.CurrentDungeonGenVars.dungeonSide`. Many of the fields have been renamed or have changed meaning, it would be wise to study the decompiled code if in doubt about any of the changes.
+* Several item tooltip line changes:
+  * The "SocialDesc" tooltip line no longer exists. The "Social" tooltip line (now "Equipped in social slot") will now only show for items that are neither `Item.vanity` or `Item.hasVanityEffects`.
+    * `Item.hasVanityEffects` is now used. It was previously unused. Set this for accessories that have vanity effects to prevent the "Social" tooltip line from appearing and suggesting the item has no effect in vanity slots.
+  * There are new tooltip lines: "ItemLoadoutSharedFrom", "ItemLoadoutShared", "Buffs", "Healing", "ManaHealing", "Mount", "Wireable", "Container", "WireTrigger", "WizardHatDuringAnniversary", "BurningBlock", "MechSummonDuringEverything", "MechdusaSummonNotDuringEverything", "PrefixArmorPenetration", "PrefixTagDamage", "SetBonusSinglePiece", "ItemLoadoutShareHint", "JourneyResearchTeammate", and "MissingRequirements".
+  * The "SetBonus" tooltip has changed. It now automatically displays partial sets and adjusts the color to indicate if the set is complete.
+  * The "SetBonusSinglePiece" tooltip shows the set bonus that would be applied if the unequipped equipment were equipped.
+* Town NPCs who are homeless have a new "Housing" button that displays their "NoHome" dialogue as well as a hint on what valid housing is. The hint text can be customized through the localization file. If the key `Mods.ModName.NPCs.NPCName.HousingText.HousingRequirements` exists, it will automatically be used over the default text.
+  * The `Mods.{ModName}.NPCs.{ModNPCName}.TownNPCMood.NoHome` localization key will now be generated for town pets as well.
+* Town NPCs can now have specific happiness dialogue for other Town NPCs or biomes that work just like the previous `LikeNPC_Princess` and `Princess_LovesNPC`.
+  * For Mod NPCs, the localization keys are scoped in `Mods.{ModName}.NPCs.{ModNPCName}.TownNPCMood`
+    * `{AffectionLevel}NPC_{OtherNPCInternalName}` For specific dialogue for talking about other NPC. Other loved NPCs will use the generic `{AffectionLevel}NPC`.
+      * Example: `LoveNPC_Guide` Would be a specific dialogue for talking about the Guide. 
+      * Modded NPCs will need the full mod name as well. Example: `LoveNPC_ExampleMod/ExamplePerson`.
+    * `{AffectionLevel}Biome_{BiomeName}` For biomes.
+      * Modded Biomes will need the full name. Example: `LoveBiome_ExampleMod/ExampleSurfaceBiome`
+    * `{OtherNPCInternalName}_{AffectionLevel}sNPC` For specific dialogue when another NPC is talking about your Mod NPC.
+      * Example: `Guide_LovesNPC` Would be specific dialogue from the Guide when he is talking about your Mod NPC.
+      * Modded NPCs will need the full mod name, too.  Example: `ExampleMod/ExamplePerson_LovesNPC`.
+  * For vanilla NPCs talking about vanilla NPCs, the localization keys are scoped in `TownNPCMood_{NPCInternalName}` (outside of Mods.ModName)
+    * `{AffectionLevel}NPC_{OtherVanillaNPCInternalName}`
+	  * Example: `TownNPCMood_Guide.LikeNPC_BestiaryGirl` Would be a specific dialogue for when the Guide is talking about the Zoologist. 
+    * `{AffectionLevel}Biome_{BiomeName}` for biomes.
+  * Caveat for the Zoologist: She has two sets of happiness dialogue. A normal one and one for when she is transformed.
+    * In the ModNPC, add Transformed beforehand: `Transformed.BestiaryGirl_{AffectionLevel}NPC`
+	* For vanilla NPCs talking about vanilla NPCs, use BestiaryGirlTransformed: `TownNPCMood_BeastiaryGirlTransformed.{AffectionLevel}NPC_{OtherNPCInternalName}`
+* `Item.maxStack` now defaults to `Item.CommonMaxStack` (9999) now instead of 1.
+* `FishingAttempt.junk` now exists.
+* Critters can now be leashed. While leashed, they are a new type of `Entity` called `LeashedCritter` rather than a `NPC`. This requires several changes to support.
+  * Assign `TECritterAnchor.CritterPrototypes[Type]` in `ModNPC.SetStaticDefaults` to dictate the animation and AI to use while leashed. 
+  * Add `ItemID.Sets.PlaceTileOnAltUse[Type] = true;` to `ModItem.SetStaticDefaults` and set `Item.createTile = TileID.CritterAnchor;` in `ModItem.SetDefaults`.
+* Minion buffs can now have a counter for how many times the minion was summoned. Simply add `BuffID.Sets.BuffTextHandlers.Add(Type, new CachedProjectileCounterBuffTextHandler(ModContent.ProjectileType<YourMinionsProjectile>()));` to the buff's `SetStaticDefaults`.
+  * Custom buff text handlers can be made by creating a class that inherits `IBuffTextHandler` if the vanilla `CachedProjectileCounterBuffTextHandler` doesn't suit your minion or if you want to display custom text on a buff for any other purpose.
+* To support mannequins holding held projectiles, `(ModProjectile|GlobalProjectile).DisplayDollSettings(Player doll, TEDisplayDoll.DisplayDollPose pose, ref int aiStyle, ref int aiType)` has been added.
+	* Many Example Mod held projectiles were updated to showcase the new hook.
+	* As mentioned in the Projectile Draw Changes section, PreDraw/Draw/PostDraw code needs to be updated to use the new `player` parameter instead of using `Main.player[Projectile.owner]`.
+	* `Projectile.drawLayer = ProjectileDrawLayerID.HeldProj` will likely need to be added to `SetDefaults` for the projectile to draw on the correct layer.
+* `Condition.DownedEarlygameBoss` now includes King Slime and Deerclops
+* Workarounds to get the correct mouse position for projectiles that draw during other draw layers are no longer required and should be removed for correct behavior. See the ExampleInteractableProjectile.cs changes.
+* Projectile identity approach has changed
+  * `Projectile.identity`, `Projectile.GetByUUID`, `Projectile.projUUID`, `ProjectileID.Sets.NeedsUUID` removed.
+  * Use `Projectile.key` instead for a consistent reference to a projectile.
+* If you relied on `NPCID.Sets.InvasionSlotCount[Type] = 0;` for preventing your modded vanilla event NPCs from playing music, use `NPCID.Sets.NoInvasionMusic[Type] = true;` in addition to it.
+* Some projectiles can now be despawned when right clicked, and optionally spawn an item as well. Flares, glowsticks, bombs, sentries, golf balls, and others despawn when right clicked by setting `ProjectileID.Sets.DespawnItemIcon`. Of those, glowsticks and bombs usually return the item as well by setting `ProjectileID.Sets.DespawnItemGivesItemBack`.
+  * 💀: Projectiles using `ProjectileID.Sets.Explosive` and `ProjectileID.Sets.DespawnItemIcon` will now automatically have `Projectile.ai[0]` set to `1000` immediately before the projectile is killed via right clicking. This might conflict with existing `ModProjectile` code and will require adjustments.
+  * Use the new `ModProjectile.PreTryDespawning` hook to set any flags necessary to adjust `ModProjectile.OnKill` behavior to support picking up projectiles.
+* `ProjectileID.Sets.Explosive` and `PrepareBombToBlow` behavior have changed. `Projectile.Kill()` will now automatically call `PrepareBombToBlow` if `Projectile.ai[0]` isn't `1000` (see above). Replace `Projectile.PrepareBombToBlow` with `Projectile.Kill`. Explosives should also set `Projectile.timeLeft = 5;` in `AI` for projectiles not owned by the client to facilitate better multiplayer sync behavior. Modders should consult relevant ExampleMod `ModProjectile` examples and adjust accordingly.
+* Zooming with items like Rifle Scope and Sniper Rifle, and Binoculars has changed. There is now a "Forward Zoom" toggle in the controls menu to change how zooming is triggered (Always On, Always Off, Click to Toggle, and Hold to Use). As such, `ModPlayer.ModifyZoom` has been adjusted with a new `needsMouseRight` parameter. Remove all checks for the right mouse being held down to correctly support these new control options.
+* An ammo cycling (given by Chaos Cylinder) feature has been added.
+* Pylons no longer require happiness to be sold
+* `LegacyAudioSystem.SetPlayCallback` can be used to run logic when a music track starts or repeats. This can be used for dynamic music selection logic. Vanilla uses this to play `RainbowBoulderStart` once before looping `RainbowBoulderLoop`. This behavior is already supported in tModLoader using loop points in .OGG files, but this new method allows the same for other audio file formats or for even more advanced music selection logic.
+
+### Example Mod
+
+Several Example Mod examples have been updated to adapt to 1.4.5 changes and to fix other issues. If you used any of these as a template/guide, we recommend applying the same changes.
+
+* `ExampleJoustingLanceProjectile` (https://github.com/tModLoader/tModLoader/pull/5145/changes)
+  * Added `ProjectileID.Sets.AllowsContactDamageFromJellyfish` to allow for damage from a zapping jellyfish.
+  * `SetDefaults`: Remove `Projectile.hide`, add `Projectile.drawLayer = ProjectileDrawLayerID.HeldProj` and `Projectile.usesOwnerLight = true`.
+    * If you are using `Projectile.DefaultToSpear()`, these two will automatically be set.
+  * The `rotationFactor` in `Colliding` has been updated.
+  * `player.gfxOffY` in `PreDraw` has been replaced with `Projectile.gfxOffY` to fix the sprite bouncing when walking up blocks.
+* `ExampleWhip`, `ExampleWhipProjectile`, `ExampleWhipAdvanced`, and `ExampleWhipProjectileAdvanced` (https://github.com/tModLoader/tModLoader/pull/5130/changes)
+  * `ExampleWhip` and `ExampleWhipProjectile` have been simplified.
+	* Added the `Shoot()` override to spawn the projectile manually for the swing direction. See the *Whip Changes* section above for details.
+    * It no longer has the charging ability that it did before (`ExampleWhipAdvanced` still has it).
+    * The draw code has been changed to be more generic.
+	  * `Projectile.FillWhipControlPoints` has been updated to pass the player parameter.
+      * It is almost an exact copy of the Leather Whip's drawing.
+	  * It assumes each segment in the sprite are equal size, like most sprite sheets are.
+	* See the *Whips and Tag Effects* section above for details on tag damage changes.
+  * `ExampleWhipAdvanced` and `ExampleWhipProjectileAdvanced` have been updated.
+    * Added the `Shoot()` override to spawn the projectile manually for the swing direction. See the *Whip Changes* section above for details.
+    * If you weren't using `Projectile.DefaultToWhip()`, add `Projectile.drawLayer = ProjectileDrawLayerID.HeldProj` to the projectile's SetDefaults.
+    * Replace `float swingTime = owner.itemAnimationMax * Projectile.MaxUpdates` with `Projectile.GetWhipSettings(Projectile, out float timeToFlyOut, out _, out _)`
+	  * `Projectile.GetWhipSettings` has new functionality for when the whip is displayed on a mannequin.
+    * Add `owner.MatchItemTimeToItemAnimation()` after setting the `heldProj` to match vanilla.
+    * The draw code has been changed to work better for different segment amounts.
+	  * `Projectile.FillWhipControlPoints` has been updated to pass the player parameter.
+      * Previously, the draw code was specific for `ExampleWhipProjectileAdvanced`. Now it will work for any number of segments.
+	  * Even if your whips seem to draw fine, double check the code because it is likely that the third segment of your whip wasn't being drawn.
+	* See the *Whips and Tag Effects* section above for details on tag damage changes.
+* `ExampleSimpleMinionBuff` now tracks how many minions were summoned with `BuffID.Sets.BuffTextHandlers`.
+* `ExampleAdvancedFlailProjectile`, `ExampleCustomSwingProjectile`, `ExampleDrillProjectile`, `ExampleFailProjectile`, `ExampleHeldProjectileWeaponProjectile`, `ExampleJoustingLanceProjectile`, `ExampleShortswordProjectile`, `ExampleSpearProjectile`, `ExampleWhipProjectile`, `ExampleWhipProjectileAdvanced`, and `ExampleYoyoProjectile` have been updated to support being held by mannequins.
+* `ExampleCustomUseStyleWeapon` (`ExampleCustomUseStyleGlobalItem`) has been updated to support being held by mannequins using `TEDisplayDoll.RegisterUsePose` and `player.isDisplayDollOrInanimate`.
 
 ## Renamed, Moved, or Removed Members
 
 ### Static Methods
 
-* 💀: `Main.GetPlayerArmPosition` now has a `Player` parameter.
+* 🤖: `Item.NewItem` has new signatures. See [Item.NewItem](#itemnewitem) for more information.
+* 🤖: `Main.DrawWindowsIMEPanel` has been split into `Main.DrawIMEPanel` and `Main.SetIMEPanelAnchor`. `DrawIMEPanel` is automatically called each game update, so just replace  `DrawWindowsIMEPanel` calls with `SetIMEPanelAnchor` to customize the panel location.
+* 🤖: `Main.GetPlayerArmPosition` removed. Use `Player.GetArmPosition` instead.
 * ⚙️: `RecipeGroup.RegisterGroup` removed. See [RecipeGroup](#recipegroup) for more information.
 * ⚙️: `Utils.PlotTileArea` -> `Utils.FloodFillTile`. No longer returns `bool` and parameters are now `Point point, float maxDist, TileActionAttempt plot` instead of `int x, int y, TileActionAttempt plot`.
 * 🤖: `WorldGen.CheckTight` -> `WorldGen.CheckStalactite`
@@ -184,9 +627,11 @@ SilverBarRecipeGroup = RecipeGroup.Register(
 
 All classes are in the `Terraria` or `Terraria.ID` namespaces unless otherwise indicated.
 
+* 🤖: `ArmorID.Head.Sets.DrawHead` -> `ArmorID.Head.Sets.HidesHead`. Meaning and default value have inverted.
 * ⚙️: `BuffID.Sets.BasicMountData` removed. Replace with `BuffID.Sets.MountType[Type] = ModContent.MountType<MyMount>();`.
 * 🤖: `BuffID.Sets.LongerExpertDebuff` -> `BuffID.Sets.BuffTimeIsExtendedWithGameDifficulty`
 * 💀: `Chest.maxItems` is no longer static.
+* 🤖: `Condition.ZenithWorld` might need to be replaced with the new `Condition.MechdusaSeedFeature` in code that specifically is checking for Mechadusa. They can technically differ.
 * 🤖: `GoreID.Sets.LiquidDroplet` -> `GoreID.Sets.IsDrip`
 * 🤖: `ImmunityCooldownID.Bosses` -> `ImmunityCooldownID.BossNoCheese`
 * ⚙️: `ItemID.Sets.ItemSpawnDecaySpeed` removed. No longer used.
@@ -202,11 +647,12 @@ All classes are in the `Terraria` or `Terraria.ID` namespaces unless otherwise i
 * 🤖: `Main.recBigList` -> `Main.PopsUseGrid`
 * 🤖: `Main.recFastScroll` -> `Main.PipsFastScroll`
 * ⚙️: `Main.item` is now `WorldItem[]` instead of `Item[]`.
-* 🤖: `MessageID` entry changes: `TileSquare` -> `AreaTileChange`, `ShotAnimationAndSound` -> `ItemRotationAndAnimation`, `PlayerTeam` -> `TeamChange`, `RequestReadSign` -> `OpenSignRequest`, `ReadSign` -> `OpenSignResponse`, `AddPlayerBuff` -> `AddPlayerBuffPvP`, `PaintTile` -> `SyncTilePaintOrCoating`, `PaintWall` -> `SyncWallPaintOrCoating`, `NPCKillCountDeathTally` -> `Unused83`, `TEDisplayDollItemSync` -> `TEDisplayDollDataSync`
+* 🤖: `MessageID` entry changes: `TileSquare` -> `AreaTileChange`, `ShotAnimationAndSound` -> `ItemRotationAndAnimation`, `PlayerTeam` -> `TeamChange`, `RequestReadSign` -> `OpenSignRequest`, `ReadSign` -> `OpenSignResponse`, `AddPlayerBuff` -> `AddPlayerBuffPvP`, `PaintTile` -> `SyncTilePaintOrCoating`, `PaintWall` -> `SyncWallPaintOrCoating`, `NPCKillCountDeathTally` -> `Unused83`, `TEDisplayDollItemSync` -> `TEDisplayDollDataSync`, `Dodge` -> `SyncDodge`, `InstancedItem` -> `SpawnInstancedItem`, `SyncItemsWithShimmer` -> `SyncItemsWithShimmerDeprecated`, `SyncItemCannotBeTakenByEnemies` -> `SyncItemCannotBeTakenByEnemiesDeprecated`
 * ⚙️: `MountID.Sets.FacePlayersVelocity` removed. Now automatic for all minecarts.
 * 🤖: `MusicId` entry changes: `Night` -> `OverworldNight`, `Title` -> `TitleClassic`, `Jungle` -> `JungleDay`, `TheHallow` -> `Hallow`, `Space` -> `SpaceNight`, `Boss4` -> `Golem`, `AltOverworldDay` -> `OverworldDayAlt`, `Ocean` -> `OceanDay`, `RainSoundEffect` -> `RainAmbience`, `Mushrooms` -> `Mushroom`, `AltUnderground` -> `UndergroundAlt`, `TheTowers` -> `LunarPillars`, `Hell` -> `Underworld`, `LunarBoss` -> `MoonLord`, `GoblinInvasion` -> `GoblinArmy`, `DayRemix` -> `OverworldDayRemix`, `MenuMusic` -> `TitleJourneysBeginningWithIntro`, `Monsoon` -> `Storm`, `JungleUnderground` -> `UndergroundJungle`, `ConsoleMenu` -> `TitleAlt`, `OtherworldlyRain` -> `OtherworldRain`, `OtherworldlyDay` -> `OtherworlddDay`, `OtherworldlyNight` -> `OtherworldNight`, `OtherworldlyUnderground` -> `OtherworldUnderground`, `OtherworldlyDesert` -> `OtherworldDesert`, `OtherworldlyOcean` -> `OtherworldOcean`, `OtherworldlyMushrooms` -> `OtherworldMushroom`, `OtherworldlyDungeon` -> `OtherworldDungeon`, `OtherworldlySpace` -> `OtherworldSpace`, `OtherworldlyUnderworld` -> `OtherworldUnderworld`, `OtherworldlySnow` -> `OtherworldSnow`, `OtherworldlyCorruption` -> `OtherworldCorruption`, `OtherworldlyUGCorrption` -> `OtherworldUndergroundCorruption`, `OtherworldlyCrimson` -> `OtherworldCrimson`, `OtherworldlyUGCrimson` -> `OtherworldUndergroundCrimson`, `OtherworldlyIce` -> `OtherworldIce`, `OtherworldlyUGHallow` -> `OtherworldUndergroundHallow`, `OtherworldlyEerie` -> `OtherworldEerie`, `OtherworldlyBoss2` -> `OtherworldBoss2`, `OtherworldlyBoss1` -> `OtherworldBoss1`, `OtherworldlyInvasion` -> `OtherworldInvasion`, `OtherworldlyTowers` -> `OtherworldLunarPillars`, `OtherworldlyLunarBoss` -> `OtherworldMoonLord`, `OtherworldlyPlantera` -> `OtherworldPlantera`, `OtherworldlyJungle` -> `OtherworldJungle`, `OtherworldlyWoF` -> `OtherworldWallOfFlesh`, `OtherworldlyHallow` -> `OtherworldHallow`, `Credits` -> `JourneysEnd`, `Shimmer` -> `Aether`
 * 🤖: `NPCID.Sets.UsesNewTargetting` -> `NPCID.Sets.UsesNewTargeting`
 * 🤖: `NPCID.Sets.GoldCrittersCollection` -> `NPCID.Sets.IsGoldCritter`. Also changed from `List` to typical to typical ID set.
+* ⚙️: `NPCID.Sets.ImmuneToAllBuffs` was removed. Continue to use `NPCID.Sets.ImmuneToRegularBuffs` and if immunity to tags effects and tag buffs is desired, additionally set the new `NPCID.Sets.ImmuneToWhipTags`.
 * 🤖: `NPCID.Sets.ShouldBeCountedAsBoss` -> `NPCID.Sets.ShouldBeCountedAsBossForBestiary`
 * 🤖: `NPCID.Sets.SpawnFromLastEmptySlot` -> `NPCID.Sets.SearchSpawnSlotsInReverse`
 * 🤖: `ProjectileID.Web` -> `ProjectileID.WebSlingerHook`
@@ -221,13 +667,17 @@ All classes are in the `Terraria` or `Terraria.ID` namespaces unless otherwise i
 * ⚙️: `TileID.Sets.IsAMechanism` -> `TileID.Sets.Wiring.IsAMechanism`
   * 💀: The meaning of `IsAMechanism` has changed, it is now used for all wireable tiles and is how the items that place the tiles automatically get the "Wireable" tooltip. Add `TileID.Sets.Wiring.IsAMechanism[Type] = true;` to all tiles that do something when wired and add `TileID.Sets.Wiring.IgnoreWhenValidatingTraps[Type] = true;` to wireable tiles that aren't traps.
 * 🤖: `TileID.Sets.IsATrigger` -> `TileID.Sets.Wiring.IsATrigger`
+* 🤖: `TileID.Sets.IsSkippedForNPCSpawningGroundTypeCheck` -> `TileID.Sets.InheritTypeOfTileBelowForNPCSpawning`
 * 🤖: `TileID.Sets.InteractibleByNPCs` -> `TileID.Sets.InteractableByNPCs`
 * 🤖: `TileID.Sets.Torch` -> `TileID.Sets.Torches`
 * 🤖: `TileID.Sets.Campfire` -> `TileID.Sets.Campfires`
+* 🤖: `TileID.Sets.WallsMergeWith` -> `TileID.Sets.TruncatesWalls`
+* 💀: `TileID.Sets.(Corrupt|Crimson|Hallow)` sets have had their biome spread function split out into `TileID.Sets.Spreads(Corrupt|Crimson|Hallow)` sets. If spreading is desired, use the new sets as well.
 * 🤖: `WallID.Sets.Corrupt` -> `WallID.Sets.SpreadsCorruption`
 * 🤖: `WallID.Sets.Crimson` -> `WallID.Sets.SpreadsCrimson`
 * 🤖: `WallID.Sets.Hallow` -> `WallID.Sets.SpreadsHallow`
 * 🤖: `Main.DisableIntenseVisualEffects` -> `Main.FlashyEffectsWorld`. The new field has the opposite meaning of the old field.
+* 💀: `Main.hasFocus` -> `Terraria.FocusHelper.IsSelectedApplication`, most likely. Other options include `FocusHelper.AllowInputProcessing`, `FocusHelper.GameplayActive`, `FocusHelper.UpdateVisualEffects`, and many more. Choose the property that best matches the intention of the code.
 * 🤖: `Main.gameInactive` -> `Terraria.FocusHelper.GameplayActive`. The new field has the opposite meaning of the old field.
 * 🤖: `NPC.killCount` -> `Terraria.GameContent.BannerSystem.killCount`
 * 🤖: `WorldGen.gen` -> `WorldGen.isGeneratingOrLoadingWorld`
@@ -242,6 +692,9 @@ All classes are in the `Terraria` or `Terraria.ID` namespaces unless otherwise i
 * 🤖: `Main.ShouldShowInvisibleWalls` -> `Main.ShouldShowInvisibleBlocksAndWalls`
 * 🤖: `NPC.ShouldBestiaryGirlBeLycantrope` now static.
 * ⚙️: `NPC.SpawnWithHigherTime` removed. No longer used.
+* 🤖: `Player.AddBuff` changed. The `quiet` and `foodHack` parameters have been removed.
+* 🤖: `Player.ChooseAmmo` -> `Player.PickAmmo_PickAmmoItem`
+* 🤖: `Player.GetItem` changed. The `plr` parameter has been removed.
 * 🤖: `Player.IsProjectileInteractibleAndInInteractionRange` -> `Player.IsProjectileInteractableAndInInteractionRange`
 * ⚙️: `Player.CheckForGoodTeleportationSpot` removed. Use `Utils.CheckForGoodTeleportationSpot` instead.
 * 💀: `Player.DropItems` now has a `gemsOnly` parameter indicating a softcore or creative player that should only drop large gems.
@@ -260,9 +713,22 @@ All classes are in the `Terraria` or `Terraria.ID` namespaces unless otherwise i
 * 🤖: `Player.adjWater` -> `Player.adjWaterSource`
 * 🤖: `Player.oldAdjWater` -> `Player.oldAdjWaterSource`
 * 🤖: `Player.isPettingAnimal` -> `Terraria.GameContent.PlayerPettingInfo.isPetting`. Just change `Player.isPettingAnimal` to `Player.petting.isPetting`.
+* ⚙️: `Player.selectedItem` is now read-only. Use `Player.selectedItemState.Select(slot)` instead. For the local player the change is buffered until the next update, so code that switches to an item, uses it and switches back in the same tick needs reworking.
+* ⚙️: `Player.nonTorch` removed. Temporary selections such as smart cursor and auto-select are now tracked by `Player.selectedItemState`. See `Player.selectedItemState.HasActiveOverride` and `Player.selectedItemState.Hotbar`.
+* ⚙️: `UIElement.OnDraw` changed from `ElementEvent` to `DrawEvent`. Handlers now take `(UIElement affectedElement, SpriteBatch sb)`. Lambdas are updated automatically, handler methods need the `SpriteBatch` parameter added.
 
 ### Classes
 * ⚙️: `Player.RandomTeleportationAttemptSettings` is now `Utils.RandomTeleportationAttemptSettings`. Modder will need to populate all relevant new fields (`teleporteeSize,  `teleporteeVelocity`, `teleporteeGravityDirection`).
+
+### Localization
+* 💀: `<left>` and `<right>` strings that automatically localized into "Left Click" and "Right Click" have been removed.
+  * Replace all `<left>` with `{InputTrigger_UseOrAttack}`.
+  * Replace `<right>` with one of these three options:
+    * `{InputTrigger_ToggleOrOpen}` Used by items that have right click functionality in the inventory. Example: Grab bags and items that transform into other items.
+	  * `{$CommonItemTooltip.RightClickToOpen}` can still be used for "Right Click to open".
+	* `{InputTrigger_InteractWithTile}` Used by things that have right click functionality with tiles or the world. Example: Placing items into a tile or right click alternate fire weapons.
+	* `{InputTrigger_InteractWithTileUI}` Used by the crafting window to tell you can right click it to switch between the classic and modern styles.
+  * These changes are to better support gamepad hint text and interactions. Also consider testing all items in your mod with right click interactions with a gamepad. You may need to add `ItemID.Sets.OpenableBag` or `ItemID.Sets.HasRightFire` if the gamepad instructions are missing or incorrect.
 
 ## tModLoader changes
 
@@ -272,13 +738,46 @@ All classes are in the `Terraria.ModLoader` or `Terraria` namespaces unless othe
 * 🤖: `ModNPC.SpawnChance` and `GlobalNPC.EditSpawnPool` changed and renamed the parameter from `NPCSpawnInfo spawnInfo` to `NPC.Spawner spawner`.
   * `GlobalNPC.EditSpawnFlags(NPC.Spawner spawner)` can be used to adjust player-level spawn flags before spawn rate, range, and tile selection. Use this when the changed flags should affect those later spawn calculations, such as biome, safe wall, or invasion state. For example, a modded safe-zone effect could set `spawner.noWorms = true` before vanilla spawn logic uses that flag.
   * `GlobalNPC.EditSpawnInfo(NPC.Spawner spawner)` can be used to adjust spawn information after the spawn tile has been selected and before `SpawnChance` and `EditSpawnPool` are evaluated. Use this for tile-level spawn context, such as water, granite, marble, spider cave, underground desert, spawn tile type, or spawn wall type. For example, a modded tile could set `spawner.nearGranite = true` so later spawn chance and spawn pool logic sees the chosen tile as granite-like.
+* 🤖: `GlobalNPC.BuffTownNPC` has new parameters to adjust more stats and now honors `AppliesToEntity`.
 * ⚙️: `(ModProjectile|GlobalProjectile).DrawBehind` has been removed. Set `Projectile.drawLayer` instead. 
 * ⚙️: `ModProjectile.DrawHeldProjInFrontOfHeldItemAndArms` has been removed. Set `Projectile.drawLayer` to `ProjectileDrawLayerID.HeldProjOverHand` instead. 
 * ⚙️: `(ModProjectile|GlobalProjectile).PreDraw/PreDrawExtras/PostDraw` now has a `Player` parameter. Use this instead of `Main.player[Projectile.owner]` to properly support rendering projectiles to custom `Player` instances, such as Mannequins.
+* ⚙️: `ModPylon.ValidTeleportCheck_AnyDanger` and `GlobalPylon.ValidTeleportCheck_PreAnyDanger` have been removed. Pylons no longer check for danger when teleporting.
+* 🤖: `ModPylon.DefaultDrawMapIcon` now has an `out bool onScreen` parameter, which should be passed as the new second parameter of `ModPylon.DefaultMapClickHandle`. On the fullscreen map, off-screen modded pylon icons are now clamped to the edge of the screen like vanilla pylons, and clicking them pans the map instead of teleporting.
+* ⚙️: `ModPylon.GetNPCShopEntry` no longer uses `Condition.HappyEnoughToSellPylons` to match vanilla changes. `Condition.HappyEnough` and `Condition.HappyEnoughToSellPylons` have been removed in favor of the more customizable `Condition.CurrentPriceAdjustmentUnder` and `Condition.CurrentPriceAdjustmentOver`.
 * 🤖: `ModTile.AddToArray` is no longer used for `TileID.Sets.RoomNeeds` entries since `TileID.Sets.RoomNeeds` fields have changed to typical ID sets.
+* `NPCLoader.blockLoot` can now affect all drops such as coins, hearts, etherian mana, and skyblock specific drops. Before it could only affect loot table drops.
 * ⚙️: `NPCSpawnInfo` is no longer used, it has been replaced by `NPC.Spawner` in functionality.
   * 🤖: The following fields changed from `NPCSpawnInfo` to `NPC.Spawner`: `DesertCave` -> `spawnUndergroundDesert`, `Granite` -> `nearGranite`, `Invasion` -> `invaders`, `Lihzahrd` -> `ZoneLihzhardTemple`, `Marble` -> `nearMarble`, `PlayerInTown` -> `spawnFriendly`, `PlayerSafe` -> `noWorms`, `Sky` -> `skyMob`, `SpiderCave` -> `spawnSpider`, `Water` -> `waterTile`
   * ⚙️: `PlanteraDefeated` removed, use `NPC.downedPlantBoss && Main.hardMode` instead.
   * 💀: `PlayerFloorX` and `PlayerFloorY` are no longer tracked by `NPC.Spawner`. Vanilla code no longer uses player floor tiles for spawning logic.
   * 💀: Using the `Player` fields such as `Player.ZoneJungle` is no longer recommended since `NPC.Spawner` contains its own version of those flags. These are used for custom spawning logic such as the dual dungeons secret seed. Failure to migrate to using these new fields will result in incorrect spawning logic.
-  * There are many other new fields in `NPC.Spawner` that might prove useful.
+  * There are many other new fields in `NPC.Spawner` that might prove useful, such as `hardDungeon`.
+* `TooltipLine` and `DrawableTooltipLine` changes:
+  * ⚙️: `(TooltipLine|DrawableTooltipLine).IsModifier` and `(TooltipLine|DrawableTooltipLine).IsModifierBad` are removed. Set `TooltipLine.Color` directly to `Terraria.ID.Colors.PrefixGood` or `Terraria.ID.Colors.PrefixBad`. If you previously needed to determine if tooltip lines were for prefixes, now check `TooltipLine.Color` against those colors or maybe see if `TooltipLine.Name` starts with "Prefix".
+  * ⚙️: `TooltipLine.OverrideColor` has been renamed to `Color`. It is no longer nullable. `DrawableTooltipLine.OverrideColor` has been removed, leaving just `DrawableTooltipLine.Color`.
+* ⚙️: `ModNPC.SetChatButtons` has been removed and replaced with `RegisterChatButtons(NPCInteractionList interactions)`
+* ⚙️: `ModNPC.OnChatButtonClicked` changed parameters. `(bool firstButton, ref string shop)` -> `(NPCInteraction interaction)`
+* ⚙️: `GlobalNPC.OnChatButtonClicked` and `GlobalNPC.PreChatButtonClicked` changed parameters. `(NPC npc, bool firstButton)` -> `(NPC npc, NPCInteraction interaction)`
+* ⚙️: `ModItem.IsQuestFish` has been removed. Use `ItemID.Sets.IsQuestFish` instead.
+* ⚙️: `Item.AllowReforgeForStackableItem` has been removed. In 1.4.5 items with prefixes can now stack. Bananarang and Light Disc are no longer consumable and no longer require obtaining multiple copies.
+* 🤖: Modded trees now support being grown directly with `Fertilizer` and `Infused Fertilizer`. This requires moving tree growing code in your sapling tiles. Move `WorldGen.GrowTree`/`WorldGen.GrowPalmTree` code from `ModTile.RandomUpdate` to the new `ModTile.GrowSapling` method and call `WorldGen.AttemptToGrowTreeFromSapling` in its place. See the [`ExampleSapling.cs` changes](https://github.com/tModLoader/tModLoader/pull/5229/changes) for an example.
+* Localized mod display names, mod descriptions, and steam workshop descriptions are now supported. [More information](https://github.com/tModLoader/tModLoader/pull/5226).
+  * Add `displayName.[languageCode] = LocalizedDisplayName` to `build.txt` to support other languages for the name of the mod.
+  * Add `description_[languageCode].txt` and `description_workshop_[languageCode].txt` to support other languages for the in-game description and steam workshop description.
+* `(Mod|Global)BlockType.RandomUpdate` (Tiles and Walls) now have an `underground` parameter to more easily support underground or overground-only logic and better support the "Don't dig up" special world seed behaviors. If that seed is active, tile locations technically underground (below `Main.worldSurface`) might be considered overground for random update purposes. Modders should trust the `underground` parameter rather than rely on checking `Main.worldSurface` to support the special characteristics of "Don't dig up".
+* 🤖: `ModCloud.Draw` now has a `List<DrawData>` parameter replacing the `SpriteBatch` parameter. Manually drawing during this hook is no longer supported due to the new horizon visuals drawing clouds using a shader, but the new parameter allows supplying additional `DrawData` if desired.
+* `ModMount.Dismount`'s `skipDust` parameter can potentially be true before the hook is called. This indicates that the player is dismounting in a location without enough room and is being forcefully teleported to a safe location. In this case, skip manual dust spawning code because the teleport effect will be displayed instead. Basically, if `skipDust` is true, skip custom despawn dust logic.
+* ⚙️: `ModPlayer.ModifyZoom` now has a `needsMouseRight` parameter. This is used to bypass the "Forward Zoom" toggle for effects that should always zoom regardless of the player's setting, like Binoculars. Remove all checks for the right mouse being held down to correctly support the new "Forward Zoom" control options.
+
+## New tModLoader features
+
+In addition to changes to existing features and adapting to vanilla changes, 1.4.5 tModLoader also contains several new features unrelated to vanilla changes.
+
+* `WallDefinition` added.
+* `ModItem.GetGolfClubProperties` added, as well as ExampleGolfClub.
+* Mod ratings are now displayed in the Mod Browser and mods can be rated from the Mods menu.
+* `Projectile.GetDefaultDrawData` helper method for calculating the default projectile draw parameters.
+* `ModSky` is an alternative to `CustomSky` that handles common boilerplate, making custom skies easier to implement and use.
+* `(Mod|Global)(Tile|Wall).(CanDoWireStuffHere|CanShowWireStuffHere)` hooks allow customizing wire interaction and visibility. One example is how wires in the Jungle Temple are hidden and can't be removed until Golem is defeated.
+* `(Mod|Global)Liquid` is a net new feature class added in 1.4.5 to support new use cases. This addition comes with the caveat it is runtime breaking; all mods using ModWall or ModTile must be compiled on 1.4.5 to adapt to intertwined backend class hierachy changes to facilitate this.   

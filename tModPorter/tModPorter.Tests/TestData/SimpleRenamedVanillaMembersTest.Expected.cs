@@ -63,13 +63,18 @@ public class SimpleRenamedVanillaMembersTest
 		bool isJourney = Main.IsJourneyMode;
 		_ = Main.PipsUseGrid;
 		_ = Main.PipsFastScroll;
+		_ = FocusHelper.IsSelectedApplication/* tModPorter Suggestion: Also consider FocusHelper.AllowInputProcessing, FocusHelper.GameplayActive, FocusHelper.UpdateVisualEffects, or others */;
 
 		PopupText popupText = PopupText.popupText[0];
 
 		int logicCheckScreenHeight = Main.MaxWorldViewSize.Y;
 		int logicCheckScreenWidth = Main.MaxWorldViewSize.X;
 
+#if COMPILE_ERROR
 		Main.musicBox2/* tModPorter Note: Removed. Use Player.musicBox instead */ = 87;
+#endif
+
+		Main.instance.SetIMEPanelAnchor(new Vector2(98f, (float)(Main.screenHeight - 36)), 0f);
 
 		int copperTierOreInt = WorldGen.SavedOreTiers.Copper;
 #if COMPILE_ERROR // ushort -> int
@@ -145,6 +150,12 @@ public class SimpleRenamedVanillaMembersTest
 		player.VanillaUpdateEquip(null)/* tModPorter Note: Removed. Use either GrantPrefixBenefits (if Item.accessory) or GrantArmorBenefits (for armor slots) */;
 #endif
 		player.CanAfford(100000);
+#if COMPILE_ERROR
+		player.oldAdjTile/* tModPorter Note: Removed. No longer used. */[0] = false;
+#endif
+#if COMPILE_ERROR
+		int nonTorch = player.nonTorch/* tModPorter Note: Removed. Use Player.selectedItemState.Hotbar or Player.selectedItemState.HasActiveOverride instead */;
+#endif
 
 		// not-yet-implemented
 		Main.PlayerRenderer.DrawPlayer(Main.Camera, player, Vector2.Zero, 0f, Vector2.Zero, 1f);
@@ -185,12 +196,14 @@ public class SimpleRenamedVanillaMembersTest
 
 		NPC npc = new NPC();
 		// not-yet-implemented
-		npc.damage = npc.GetAttackDamage_ScaledByStrength(80f); // int cast matches return type
-		// instead-expect
-		npc.damage = (int)(80f * Main.GameModeInfo.EnemyDamageMultiplier); // int cast matches return type
 #if COMPILE_ERROR
+		npc.damage = npc.GetAttackDamage_ScaledByStrength(80f); // int cast matches return type
 #endif
+		// instead-expect
+#if COMPILE_ERROR
+		npc.damage = (int)(80f * Main.GameModeInfo.EnemyDamageMultiplier); // int cast matches return type
 		npc.netSkip/* tModPorter Note: Removed. No longer necessary when setting life <= 0 and was never necessary when setting active = false */ = -1;
+#endif
 
 		// not-yet-implemented
 		Utils.TileActionAttempt cut = DelegateMethods.CutTiles;
@@ -204,6 +217,23 @@ public class SimpleRenamedVanillaMembersTest
 		_ = BannerSystem.BannerToItem(Banner);
 		_ = BannerSystem.BannerToNPC(Banner);
 
+#if COMPILE_ERROR
 		Utils.FloodFillTile(10, 20, DelegateMethods.SpreadLightOpen_StopForSolids)/* tModPorter Parameters have changed */;
+#endif
+
+		Projectile projectile = Main.projectile[0];
+#if COMPILE_ERROR
+		Vector2 armPosition = Main.GetPlayerArmPosition(projectile, player)/* tModPorter Note: Removed. Use Player.GetArmPosition instead */;
+		_ = projectile.identity/* tModPorter Note: Removed. Use Projectile.key instead. */;
+		_ = projectile.projUUID/* tModPorter Note: Removed. Use Projectile.key instead. */;
+		_ = Projectile.GetByUUID(projectile.owner, projectile.whoAmI)/* tModPorter Note: Removed. Use Projectile.key instead. */;
+#endif
+
+		var tradeOption = new ItemTrader.TradeOption();
+		_ = tradeOption.GivingItemType;
+
+		_ = ContentSamples.CreativeHelper.ItemGroup.PlaceableObjects;
+
+		Item ammo = player.PickAmmo_PickAmmoItem(player.HeldItem);
 	}
 }
