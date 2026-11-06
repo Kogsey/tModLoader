@@ -1,10 +1,6 @@
 --- src/TerrariaNetCore/Terraria/ID/MessageID.cs
 +++ src/tModLoader/Terraria/ID/MessageID.cs
-<<<<<<< HEAD
-@@ -1,165 +_,682 @@
-=======
 @@ -1,165 +_,693 @@
->>>>>>> 1.4.5
  using Terraria.Utilities;
 +using Terraria.ModLoader;
  
@@ -692,21 +688,8 @@
 +	/// <br/><br/> <see cref="SyncItem"/> docs:
 +	/// <br/><br/> <inheritdoc cref="SyncItem"/>
 +	/// </summary>
-<<<<<<< HEAD
- 	public const byte SyncItemsWithShimmer = 145;
-
-+	/// <summary>
-+	/// <listheader> Contains 3 settings for number </listheader>
-+	/// <list type="bullet">
-+	/// <item/>0: Calls <see cref="Item.ShimmerEffect(Microsoft.Xna.Framework.Vector2)"/> where the vector is number2, number3 (Sound and dusts)
-+	/// <item/>1: Calls <see cref="Player.AddCoinLuck(Microsoft.Xna.Framework.Vector2, int) "/> on the receiver's local player where the vector is number2, number3 and the integer is number4
-+	/// <item/>2: Calls <see cref="NPC.SetNetShimmerEffect"/> where number is <see cref="Entity.whoAmI"/> for the npc
-+	/// </list>
-+	/// </summary>
-=======
  	public const byte SyncItemsWithShimmerDeprecated = 145;
 +
->>>>>>> 1.4.5
  	public const byte ShimmerActions = 146;
 +
  	public const byte SyncLoadout = 147;
