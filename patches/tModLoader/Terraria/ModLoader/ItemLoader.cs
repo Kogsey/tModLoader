@@ -2346,31 +2346,29 @@ public static class ItemLoader
 		return false;
 	}
 
-	// TODO KOGSEY: this
+	private static HookList HookCanShimmer = AddHook<Func<WorldItem, bool>>(g => g.CanShimmer);
 
-	// private static HookList HookCanShimmer = AddHook<Func<WorldItem, bool>>(g => g.CanShimmer);
-	//
-	// public static bool CanShimmer(WorldItem item)
-	// {
-	// 	if (item.ModItem?.CanShimmer() == false)
-	// 		return false;
-	//
-	// 	foreach (var g in HookCanShimmer.Enumerate(item)) {
-	// 		if (!g.CanShimmer(item)) {
-	// 			return false;
-	// 		}
-	// 	}
-	//
-	// 	return true;
-	// }
-	//
-	// private static HookList HookOnShimmer = AddHook<Action<WorldItem>>(g => g.OnShimmer);
-	//
-	// public static void OnShimmer(WorldItem item)
-	// {
-	// 	item.ModItem?.OnShimmer();
-	//
-	// 	foreach (var g in HookOnShimmer.Enumerate(item))
-	// 		g.OnShimmer(item);
-	// }
+	public static bool CanShimmer(WorldItem item)
+	{
+		if (item.ModItem?.CanShimmer() == false)
+			return false;
+
+		foreach (GlobalItem g in HookCanShimmer.Enumerate(item.inner)) {
+			if (!g.CanShimmer(item)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static HookList HookOnShimmer = AddHook<Action<WorldItem>>(g => g.OnShimmer);
+
+	public static void OnShimmer(WorldItem item)
+	{
+		item.ModItem?.OnShimmer();
+
+		foreach (GlobalItem g in HookOnShimmer.Enumerate(item.inner))
+			g.OnShimmer(item);
+	}
 }
