@@ -10,7 +10,7 @@
  namespace Terraria;
  
 -public class WorldItem : Entity
-+public partial class WorldItem : Entity
++public partial class WorldItem : Entity, IModShimmerable
  {
  	public Item inner = new Item();
  	public int ownTime;
@@ -68,6 +68,14 @@
  		get {
  			return inner.makeNPC;
  		}
+@@ -156,6 +_,7 @@
+ 		wetCount = 0;
+ 		lavaWet = false;
+ 		timeSinceTheItemHasBeenReservedForSomeone = 0;
++		PreventingChainedShimmers = false;
+ 		instanced = false;
+ 		UpdateEntityFields();
+ 	}
 @@ -338,7 +_,10 @@
  		float maxFallSpeed = 7f;
  		if (Main.netMode == 1) {

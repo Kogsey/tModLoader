@@ -6,7 +6,7 @@ namespace Terraria.ModLoader.Utilities;
 
 public interface IOrderable //TODO: Figure out if the sorting algorithm works with value types, ref only for now
 {
-	public (object target, bool after) Ordering { get; }
+	public (IOrderable target, bool after) Ordering { get; }
 }
 
 public static class OrderableExtensions

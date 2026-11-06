@@ -1528,7 +1528,7 @@ ref float maxCanAscendMultiplier, ref float maxAscentMultiplier, ref float const
 	/// <see cref="ShimmerTransformation{T}"/>&lt;<see cref="Terraria.Item"/>&gt;, use <see cref="ShimmerTransformation{T}.Register()"/> to register it into the game.
 	/// <br/> Call this at the very beginning when creating a new <see cref="ShimmerTransformation{T}"/>&lt;<see cref="Terraria.Item"/>&gt;.
 	/// </summary>
-	public ShimmerTransformation<Item> CreateShimmerTransformation() => new(Item);
+	public ShimmerTransformation<WorldItem> CreateShimmerTransformation() => new();
 
 	/// <summary>
 	/// Return false to prevent this Item from shimmering, shouldn't have side effects

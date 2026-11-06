@@ -98,7 +98,7 @@ public class ItemShimmerShowcaseModShimmer : ModItem
 	public override string Texture => "ExampleMod/Content/Items/ExampleItem";
 
 	public override void SetStaticDefaults() {
-		ShimmerTransformation<Item> transformation = CreateShimmerTransformation() // Using CreateShimmerTransformation we create an instance of ShimmerTransformation
+		ShimmerTransformation<WorldItem> transformation = CreateShimmerTransformation() // Using CreateShimmerTransformation we create an instance of ShimmerTransformation
 			.AddCondition(Condition.Christmas) // Just like Recipe we can apply condition and item results
 			.AddItemResult(ItemID.Present, 2);
 		transformation.Register();
@@ -106,8 +106,8 @@ public class ItemShimmerShowcaseModShimmer : ModItem
 		CreateShimmerTransformation()
 			.AddItemResult<ExampleDye>(30)
 			// Changes the value of the first result to a random number inclusive between 20 - 40
-			.AddModifyShimmerCallBack((transformation, source) => transformation.Results[0] = (GeneralShimmerResult)transformation.Results[0] with { Count = Main.rand.Next(20, 41) })
-			.AddNPCResult<ExampleZombieThief>(2) // Unlike recipe we can spawn NPCs here, of any count, under conditions
+			.AddModifyShimmerCallBack((trans, _) => trans.Results[0] = (GeneralShimmerResult)trans.Results[0] with { Count = Main.rand.Next(20, 41) })
+			.AddNPCResult<ExampleZombieThief>(2) // Unlike recipe, we can spawn NPCs here, of any count, under conditions
 			.AddCoinLuckResult(2) // We can also add coin luck
 			.SortBefore(transformation, Type)
 			.Register();

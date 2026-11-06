@@ -330,7 +330,6 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>, IModShimmerable
 		noSpawnCycle = true;
 		active = false;
 		if (Main.netMode == NetmodeID.Server) {
-			netSkip = -1;
 			life = 0;
 			NetMessage.SendData(MessageID.SyncNPC, -1, -1, null, whoAmI);
 		}
@@ -340,7 +339,7 @@ public partial class NPC : IEntityWithGlobals<GlobalNPC>, IModShimmerable
 	/// For this <see cref="NPC"/> override, calls <see cref="NPCLoader.OnShimmer(NPC)"/>
 	/// </summary>
 	public void OnShimmer() => NPCLoader.OnShimmer(this);
-	
+
 	/// <summary>
 	/// Adjusts <see cref="buffImmune"/> to make this NPC immune to the provided buff as well as all other buffs that inherit the immunity of that buff (via <see cref="BuffID.Sets.GrantImmunityWith"/>). This method can be followed by <see cref="ClearImmuneToBuffs(out bool)"/> if the NPC should clear any buff it currently has that it is now immune to.
 	/// </summary>

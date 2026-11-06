@@ -1456,7 +1456,7 @@
  	private void Shimmer()
  	{
 +		ModdedProjectileShimmer();
-+		
++
  		if ((hostile && aiStyle != 25 && aiStyle != 17) || (aiStyle == 99 && ai[0] == -1f) || (aiStyle == 15 && (ai[0] == 2f || ai[0] == 4f)))
  			return;
  

@@ -8,8 +8,8 @@ public record class ShimmerInfo(int AllowedSpawnStack);
 
 public interface IShimmerResult<in TShimmerable> where TShimmerable : IModShimmerable
 {
-	public abstract bool HandlesCleanUp { get; }
-	public abstract int Count { get; }
+	public bool HandlesCleanUp { get; }
+	public int Count { get; }
 
 	/// <summary> Used to check if this is an <see cref="Item"/> of <paramref name="type"/> </summary>
 	public bool IsItemResult(int type) => false;
@@ -27,7 +27,7 @@ public interface IShimmerResult<in TShimmerable> where TShimmerable : IModShimme
 	/// <param name="shimmerable"> The <see cref="IModShimmerable"/> that is shimmering, does not affect this </param>
 	/// <param name="shimmerInfo"> The amount of the <see cref="IModShimmerable"/> that is used, actual spawned amount will be <paramref name="shimmerInfo"/> * <see cref="Count"/> </param>
 	/// <returns> yield returns an <see cref="IModShimmerable"/> or in the case of <see cref="CoinLuckShimmerResult"/> yield returns null. Will not return a null instance itself </returns>
-	public abstract IEnumerable<IModShimmerable> SpawnFrom(TShimmerable shimmerable, ShimmerInfo shimmerInfo);
+	public IEnumerable<IModShimmerable> SpawnFrom(TShimmerable shimmerable, ShimmerInfo shimmerInfo);
 }
 
 /// <summary> A record representing the information to spawn an <see cref="IModShimmerable"/> during a shimmer transformation </summary>
@@ -60,21 +60,21 @@ public record class CoinLuckShimmerResult(int Count = 1) : GeneralShimmerResult(
 /// <param name="Count"> <inheritdoc cref="GeneralShimmerResult(int)"/> </param>
 /// <summary>
 /// <inheritdoc cref="GeneralShimmerResult(int)"/><br/> Using <see cref="IShimmerResult{T}.IsItemResult(int)"/> and its relatives, this type can be used for inter-mod compatibility when implementing
-/// custom spawning behaviour across known types
+/// custom spawning behavior across known types
 /// </summary>
 public abstract record class TypedShimmerResult(int Type, int Count = 1) : GeneralShimmerResult(Count);
 
 /// <inheritdoc cref="TypedShimmerResult(int, int)"/>
-public record class ItemShimmerResult(int Type, int Count = 1) : TypedShimmerResult(Type, Count), IShimmerResult<IModShimmerable>
+public record class ItemShimmerResult(int Type, int Count = 1) : TypedShimmerResult(Type, Count)
 {
 	public override bool IsItemResult(int type)
 		=> Type == type;
 
-	public override IEnumerable<Item> SpawnFrom(IModShimmerable shimmerable, ShimmerInfo shimmerInfo)
+	public override IEnumerable<WorldItem> SpawnFrom(IModShimmerable shimmerable, ShimmerInfo shimmerInfo)
 	{
 		int spawnTotal = Count * shimmerInfo.AllowedSpawnStack;
 		while (spawnTotal > 0) {
-			Item item = Main.item[Item.NewItem(shimmerable.GetSource_Misc("Shimmer"), shimmerable.Center, Type)];
+			WorldItem item = Main.item[Item.NewItem(shimmerable.GetSource_Misc("Shimmer"), shimmerable.Center, Type)];
 			item.position -= item.Size / 2; // Centre
 			item.stack = Math.Min(item.maxStack, spawnTotal);
 			item.shimmerTime = 1f;
@@ -95,17 +95,17 @@ public record class NPCShimmerResult(int Type, int Count = 1, float? Scale = nul
 	/// <summary>
 	/// Keeps <see cref="ShimmerTransformation"/> roughly in line with vanilla as far as base functionality goes when shimmering NPCs. Defaults to true. If you have no reason to disable,
 	/// don't. Here are the effects: <code>
-	/// newNPC.extraValue = nPC.extraValue;
-	/// newNPC.CopyInteractions(nPC);
-	/// newNPC.spriteDirection = nPC.spriteDirection;
+	/// newNPC.extraValue = npc.extraValue;
+	/// newNPC.CopyInteractions(npc);
+	/// newNPC.spriteDirection = npc.spriteDirection;
 	///
-	/// if (nPC.value == 0f)
+	/// if (npc.value == 0f)
 	///		newNPC.value = 0f;
-	/// newNPC.SpawnedFromStatue = nPC.SpawnedFromStatue;
-	/// newNPC.shimmerTransparency = nPC.shimmerTransparency;
-	/// newNPC.buffType = nPC.buffType[..];
-	/// newNPC.buffTime = nPC.buffTime[..];
-	///</code>
+	/// newNPC.SpawnedFromStatue = npc.SpawnedFromStatue;
+	/// newNPC.shimmerTransparency = npc.shimmerTransparency;
+	/// newNPC.buffType = (int[])npc.buffType.Clone();
+	/// newNPC.buffTime = (int[])npc.buffType.Clone();
+	/// </code>
 	/// </summary>
 	public bool KeepVanillaTransformationConventions { get; init; } = true;
 	/// <summary> Passed to <see cref="NPC.NewNPC(DataStructures.IEntitySource, int, int, int, int, float, float, float, float, int)"/> </summary>
@@ -118,9 +118,6 @@ public record class NPCShimmerResult(int Type, int Count = 1, float? Scale = nul
 	public float AI2 { get; init; }
 	/// <summary> Passed to <see cref="NPC.NewNPC(DataStructures.IEntitySource, int, int, int, int, float, float, float, float, int)"/> </summary>
 	public float AI3 { get; init; }
-
-	/// <summary> Wraps <see cref="AI0"/>, <see cref="AI1"/>, <see cref="AI2"/>, and <see cref="AI3"/> </summary>
-	public float[] AI { get => new float[4] { AI0, AI1, AI2, AI3 }; init { AI0 = value[0]; AI1 = value[1]; AI2 = value[2]; AI3 = value[3]; } }
 	public override bool IsNPCResult(int type)
 		=> Type == type;
 
@@ -131,18 +128,18 @@ public record class NPCShimmerResult(int Type, int Count = 1, float? Scale = nul
 			NPC newNPC = NPC.NewNPCDirect(shimmerable.GetSource_Misc("Shimmer"), shimmerable.Center, Type, Start, AI0, AI1, AI2, AI3);
 			newNPC.position -= newNPC.Size / 2; // Centre
 
-			//syncing up some values that vanilla intentionally sets after SetDefaults() is NPC transformations, mostly self explanatory
-			if (shimmerable is NPC nPC && KeepVanillaTransformationConventions) {
-				newNPC.extraValue = nPC.extraValue;
-				newNPC.CopyInteractions(nPC);
-				newNPC.spriteDirection = nPC.spriteDirection;
+			//syncing up some values that vanilla intentionally sets after SetDefaults() is NPC transformations, mostly self-explanatory
+			if (shimmerable is NPC npc && KeepVanillaTransformationConventions) {
+				newNPC.extraValue = npc.extraValue;
+				newNPC.CopyInteractions(npc);
+				newNPC.spriteDirection = npc.spriteDirection;
 
-				if (nPC.value == 0f) // Statue stuff
+				if (npc.value == 0f) // Statue stuff
 					newNPC.value = 0f;
-				newNPC.SpawnedFromStatue = nPC.SpawnedFromStatue;
-				newNPC.shimmerTransparency = nPC.shimmerTransparency;
-				newNPC.buffType = nPC.buffType[..]; // Pretty sure the manual way vanilla does it is actually the slowest way that isn't LINQ
-				newNPC.buffTime = nPC.buffTime[..];
+				newNPC.SpawnedFromStatue = npc.SpawnedFromStatue;
+				newNPC.shimmerTransparency = npc.shimmerTransparency;
+				newNPC.buffType = (int[])npc.buffType.Clone(); // This looks different from vanilla but is identical
+				newNPC.buffTime = (int[])npc.buffTime.Clone();
 			}
 			if (shimmerable is Projectile projectile && KeepVanillaTransformationConventions) {
 				newNPC.shimmerTransparency = projectile.shimmerTransformTime;

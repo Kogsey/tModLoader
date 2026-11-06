@@ -333,16 +333,6 @@ public partial class Recipe
 		return this;
 	}
 
-	/// <summary>
-	/// Sets a callback that allows you to determine how many of a certain ingredient is consumed when this recipe is used. Return the number of ingredients that will actually be consumed. By default returns numRequired.
-	/// </summary>
-	public Recipe AddShimmerConsumeItemCallback(ConsumeItemCallback callback)
-	{
-		ShimmerConsumeItemHooks += callback;
-
-		return this;
-	}
-
 	#region Ordering
 
 	/// <summary>
