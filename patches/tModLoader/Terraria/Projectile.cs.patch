@@ -1640,6 +1640,34 @@
  
  	private void AI_152_SuperStarSlash()
  	{
+@@ -19187,6 +_,9 @@
+ 		tileCollide = false;
+ 	}
+ 
++	/// <summary>
++	/// Changes the <see cref="Entity.width"/> and <see cref="Entity.height"/> of the projectile while preserving the <see cref="Entity.Center"/>. Useful for explosive projectiles that expand their hitbox while exploding.
++	/// </summary>
+ 	public void Resize(int newWidth, int newHeight)
+ 	{
+ 		position = base.Center;
+@@ -19197,6 +_,8 @@
+ 
+ 	private void Shimmer()
+ 	{
++		ModdedProjectileShimmer();
++
+ 		if ((hostile && aiStyle != 25 && aiStyle != 17) || (aiStyle == 99 && ai[0] == -1f) || (aiStyle == 15 && (ai[0] == 2f || ai[0] == 4f)))
+ 			return;
+ 
+@@ -19228,7 +_,7 @@
+ 			velocity.X *= 1.1f;
+ 			velocity.X = Utils.Clamp(velocity.X, -14f, 14f);
+ 		}
+-		else if (aiStyle == 1 || aiStyle == 16 || aiStyle == 40 || type == 229) {
++		else if (aiStyle == 1 || (aiStyle == 16 || ProjectileID.Sets.Explosive[type]) || aiStyle == 40 || type == 229) {
+ 			int num = (int)(base.Center.X / 16f);
+ 			int num2 = (int)(position.Y / 16f);
+ 			if (WorldGen.InWorld(num, num2) && Main.tile[num, num2] != null && Main.tile[num, num2].liquid == byte.MaxValue && Main.tile[num, num2].shimmer() && WorldGen.InWorld(num, num2 - 1) && Main.tile[num, num2 - 1] != null && Main.tile[num, num2 - 1].liquid > 0 && Main.tile[num, num2 - 1].shimmer()) {
 @@ -19302,7 +_,7 @@
  				timeLeft -= 20;
  			}

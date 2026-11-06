@@ -811,54 +811,8 @@ if (nPC.aiStyle == 7)
  				num = 5;
 
 
-
-
-//// MessageID.cs
-
- 	public const byte SyncItemsWithShimmer = 145;
-
-+	/// <summary>
-+	/// <listheader> Contains 3 settings for number </listheader>
-+	/// <list type="bullet">
-+	/// <item/>0: Calls <see cref="Item.ShimmerEffect(Microsoft.Xna.Framework.Vector2)"/> where the vector is number2, number3 (Sound and dusts)
-+	/// <item/>1: Calls <see cref="Player.AddCoinLuck(Microsoft.Xna.Framework.Vector2, int) "/> on the receiver's local player where the vector is number2, number3 and the integer is number4
-+	/// <item/>2: Calls <see cref="NPC.SetNetShimmerEffect"/> where number is <see cref="Entity.whoAmI"/> for the npc
-+	/// </list>
-+	/// </summary>
-
 ///// WorldItem.cs
 
  		timeSinceTheItemHasBeenReservedForSomeone = 0;
 +		PreventingChainedShimmers = false;
-
-Projectile.cs
-@@ -19156,6 +_,8 @@
-
- 	private void Shimmer()
- 	{
-+		ModdedProjectileShimmer();
-+
- 		if ((hostile && aiStyle != 25 && aiStyle != 17) || (aiStyle == 99 && ai[0] == -1f) || (aiStyle == 15 && (ai[0] == 2f || ai[0] == 4f)))
- 			return;
-
-////Projectile.cs
-@@ -19187,6 +_,9 @@
- 		tileCollide = false;
- 	}
-
-+	/// <summary>
-+	/// Changes the <see cref="Entity.width"/> and <see cref="Entity.height"/> of the projectile while preserving the <see cref="Entity.Center"/>. Useful for explosive projectiles that expand their hitbox while exploding.
-+	/// </summary>
- 	public void Resize(int newWidth, int newHeight)
- 	{
- 		position = base.Center;
-@@ -19187,7 +_,7 @@
- 			velocity.X *= 1.1f;
- 			velocity.X = Utils.Clamp(velocity.X, -14f, 14f);
- 		}
--		else if (aiStyle == 1 || aiStyle == 16 || aiStyle == 40 || type == 229) {
-+		else if (aiStyle == 1 || (aiStyle == 16 || ProjectileID.Sets.Explosive[type]) || aiStyle == 40 || type == 229) {
- 			int num = (int)(base.Center.X / 16f);
- 			int num2 = (int)(position.Y / 16f);
- 			if (WorldGen.InWorld(num, num2) && Main.tile[num, num2] != null && Main.tile[num, num2].liquid == byte.MaxValue && Main.tile[num, num2].shimmer() && WorldGen.InWorld(num, num2 - 1) && Main.tile[num, num2 - 1] != null && Main.tile[num, num2 - 1].liquid > 0 && Main.tile[num, num2 - 1].shimmer()) {
 
